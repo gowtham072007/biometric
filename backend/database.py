@@ -4,10 +4,10 @@ from pathlib import Path
 from backend.config import Config
 
 try:
-    # pyrefly: ignore [missing-import]
-    import psycopg2
-    # pyrefly: ignore [missing-import]
-    from psycopg2.extras import RealDictCursor
+    # pyright: ignore [reportMissingTypeStubs]
+    import psycopg2  # type: ignore
+    # pyright: ignore [reportMissingTypeStubs]
+    from psycopg2.extras import RealDictCursor  # type: ignore
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -339,7 +339,9 @@ def _init_sqlite_db(db_path=None):
 
     # Seed Default Geofence Settings if empty
     cursor.execute("SELECT COUNT(*) FROM geofence_settings")
-    if cursor.fetchone()[0] == 0:
+    row = cursor.fetchone()
+    count = row[0] if row else 0
+    if count == 0:
         cursor.execute("""
             INSERT INTO geofence_settings (location_name, latitude, longitude, radius_meters, max_gps_accuracy_meters, is_demo_mode)
             VALUES (?, ?, ?, ?, ?, 0)

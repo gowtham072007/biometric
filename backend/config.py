@@ -1,6 +1,7 @@
 import os
 import urllib.parse
 from pathlib import Path
+from typing import Optional
 # pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
@@ -11,7 +12,7 @@ if env_path.exists():
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-def sanitize_database_url(url: str) -> str:
+def sanitize_database_url(url: Optional[str]) -> Optional[str]:
     """Sanitizes, URL-encodes passwords, and ensures IPv4 pooler usage for Supabase on IPv4-only hosts."""
     if not url:
         return None
