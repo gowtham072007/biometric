@@ -52,6 +52,8 @@ class PostgresCursorWrapper:
         self._cursor = cursor
 
     def execute(self, query, params=None):
+        if query.strip().upper().startswith('PRAGMA'):
+            return None
         if params is not None:
             # Convert ? placeholders to %s for PostgreSQL compatibility
             query = query.replace('?', '%s')

@@ -36,7 +36,7 @@ def create_app():
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # Enable CORS for local development and session credentials
-    cors_origins = list(set([Config.WEBAUTHN_ORIGIN, "http://localhost:5000", "http://127.0.0.1:5000"]))
+    cors_origins = [o for o in set([Config.WEBAUTHN_ORIGIN, "http://localhost:5000", "http://127.0.0.1:5000"]) if o]
     CORS(app, supports_credentials=True, origins=cors_origins)
 
     # Initialize SQLite Database

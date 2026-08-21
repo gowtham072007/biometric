@@ -522,8 +522,8 @@ def get_user_punch_info_today(user_id: str) -> dict:
             'punch_count': 0
         }
 
-    punch_in = rows[0]['timestamp'] if isinstance(rows[0], sqlite3.Row) else rows[0][0]
-    punch_out = (rows[-1]['timestamp'] if isinstance(rows[-1], sqlite3.Row) else rows[-1][0]) if len(rows) > 1 else None
+    punch_in = rows[0]['timestamp']
+    punch_out = rows[-1]['timestamp'] if len(rows) > 1 else None
 
     return {
         'today_date': ist_today,
@@ -857,8 +857,7 @@ def create_credential(user_id: str, credential_id: str, public_key: str, sign_co
         VALUES (?, ?, ?, ?, ?)
     """, (user_id, credential_id, public_key, sign_count, credential_name))
     conn.commit()
-    cred_id = cursor.lastrowid
-    cursor.execute("SELECT * FROM webauthn_credentials WHERE id = ?", (cred_id,))
+    cursor.execute("SELECT * FROM webauthn_credentials WHERE credential_id = ?", (credential_id,))
     row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
@@ -954,8 +953,11 @@ def log_authentication_event(user_id: str, latitude: float, longitude: float, gp
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (user_id, ist_time, latitude, longitude, gps_accuracy, calculated_distance, result, failure_reason, credential_id, ip_address, user_agent))
     conn.commit()
-    log_id = cursor.lastrowid
-    cursor.execute("SELECT * FROM authentication_logs WHERE id = ?", (log_id,))
+    log_id = getattr(cursor, 'lastrowid', None)
+    if log_id:
+        cursor.execute("SELECT * FROM authentication_logs WHERE id = ?", (log_id,))
+    else:
+        cursor.execute("SELECT * FROM authentication_logs WHERE user_id = ? AND timestamp = ? ORDER BY id DESC LIMIT 1", (user_id, ist_time))
     row = cursor.fetchone()
     conn.close()
     return row_to_dict(row)
@@ -1069,7 +1071,7 @@ def get_dashboard_stats() -> dict:
     """)
     user_presents = cursor.fetchall()
     if user_presents:
-        pcts = [min(100.0, round(((r['present_count'] if isinstance(r, sqlite3.Row) else r[0]) / total_system_days) * 100, 1)) for r in user_presents]
+        pcts = [min(100.0, round((r['present_count'] / total_system_days) * 100, 1)) for r in user_presents]
         avg_pct = round(sum(pcts) / len(pcts), 1)
     else:
         avg_pct = 0.0
