@@ -2,6 +2,7 @@ import sqlite3
 import random
 import time as time_module
 from datetime import datetime, time, timezone, timedelta
+from typing import Any, Dict, List, Optional, Union
 from backend.database import get_db_connection
 from backend.utils.serializers import row_to_dict, rows_to_list
 
@@ -23,7 +24,7 @@ def get_ist_today() -> str:
 # User Model Operations
 # ==============================================================================
 
-def create_user(user_id: str, full_name: str, email: str, phone: str, password_hash: str, role: str = 'user', status: str = 'active') -> dict:
+def create_user(user_id: Any, full_name: Any, email: Any, phone: Any, password_hash: str, role: Any = 'user', status: Any = 'active') -> Optional[dict]:
     if not user_id or not email:
         raise ValueError("User ID and Email are required.")
 
@@ -61,7 +62,7 @@ def create_user(user_id: str, full_name: str, email: str, phone: str, password_h
     finally:
         conn.close()
 
-def get_user_by_id(user_id: str) -> dict:
+def get_user_by_id(user_id: Any) -> Optional[dict]:
     if user_id is None:
         return None
     conn = get_db_connection()
@@ -71,7 +72,7 @@ def get_user_by_id(user_id: str) -> dict:
     conn.close()
     return row_to_dict(row)
 
-def get_user_by_email(email: str) -> dict:
+def get_user_by_email(email: Any) -> Optional[dict]:
     if email is None:
         return None
     conn = get_db_connection()
@@ -81,7 +82,7 @@ def get_user_by_email(email: str) -> dict:
     conn.close()
     return row_to_dict(row)
 
-def get_user_by_id_or_email(identifier: str) -> dict:
+def get_user_by_id_or_email(identifier: Any) -> Optional[dict]:
     if not identifier:
         return None
     clean = str(identifier).strip()
@@ -90,7 +91,7 @@ def get_user_by_id_or_email(identifier: str) -> dict:
         user = get_user_by_email(clean)
     return user
 
-def get_all_users(search_query: str = None, status_filter: str = None, role_filter: str = None, sort_by: str = None) -> list:
+def get_all_users(search_query: Optional[str] = None, status_filter: Optional[str] = None, role_filter: Optional[str] = None, sort_by: Optional[str] = None) -> list:
     """Returns a list of all users with passkey count, present days, attendance percentage, and last auth."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -155,7 +156,7 @@ def get_all_users(search_query: str = None, status_filter: str = None, role_filt
 
     return user_list
 
-def get_user_full_details(user_id: str) -> dict:
+def get_user_full_details(user_id: Any) -> Optional[dict]:
     """Returns detailed user profile including credentials, attendance summary, today's punch, logs, and late slips."""
     user = get_user_by_id(user_id)
     if not user:
@@ -180,7 +181,7 @@ def get_user_full_details(user_id: str) -> dict:
         'late_slip': late_slip
     }
 
-def update_user_status(user_id: str, status: str) -> bool:
+def update_user_status(user_id: Any, status: Any) -> bool:
     clean_status = str(status).strip().lower()
     if clean_status not in ['active', 'inactive', 'blocked_late']:
         raise ValueError("Invalid status. Must be 'active', 'inactive', or 'blocked_late'.")
@@ -193,7 +194,7 @@ def update_user_status(user_id: str, status: str) -> bool:
     conn.close()
     return affected > 0
 
-def update_user_details(user_id: str, new_user_id: str = None, full_name: str = None, email: str = None, phone: str = None, role: str = None, status: str = None, new_password: str = None) -> dict:
+def update_user_details(user_id: Any, new_user_id: Optional[str] = None, full_name: Optional[str] = None, email: Optional[str] = None, phone: Optional[str] = None, role: Optional[str] = None, status: Optional[str] = None, new_password: Optional[str] = None) -> Optional[dict]:
     from backend.utils.security import hash_password
 
     user = get_user_by_id(user_id)
@@ -296,7 +297,7 @@ def update_user_details(user_id: str, new_user_id: str = None, full_name: str = 
     conn.close()
     return get_user_by_id(target_user_id)
 
-def update_own_profile(user_id: str, full_name: str = None, email: str = None, phone: str = None) -> dict:
+def update_own_profile(user_id: Any, full_name: Optional[str] = None, email: Optional[str] = None, phone: Optional[str] = None) -> Optional[dict]:
     """Updates user's own profile (full name, email, phone) without role/status changes."""
     user = get_user_by_id(user_id)
     if not user:
@@ -346,7 +347,7 @@ def update_own_profile(user_id: str, full_name: str = None, email: str = None, p
     conn.close()
     return get_user_by_id(user_id)
 
-def delete_user(user_id: str) -> bool:
+def delete_user(user_id: Any) -> bool:
     if user_id == 'admin':
         raise ValueError("Default system admin cannot be deleted.")
 
@@ -362,15 +363,15 @@ def delete_user(user_id: str) -> bool:
     conn.close()
     return affected > 0
 
-def reset_user_password(user_id_or_email: str, phone: str, new_password: str) -> dict:
+def reset_user_password(user_id_or_email: Any, phone: Any, new_password: Any) -> Optional[dict]:
     """Verifies user by User ID/Email and phone number, then resets their account password."""
     user = verify_user_phone(user_id_or_email, phone)
     return update_user_password_direct(user['user_id'], new_password)
 
-def verify_user_phone(user_id_or_email: str, phone: str) -> dict:
+def verify_user_phone(user_id_or_email: Any, phone: Any) -> dict:
     """Verifies user exists and phone matches registered user record."""
-    clean_id = str(user_id_or_email).strip()
-    clean_phone = str(phone).strip()
+    clean_id = str(user_id_or_email).strip() if user_id_or_email is not None else ''
+    clean_phone = str(phone).strip() if phone is not None else ''
 
     if not clean_id or not clean_phone:
         raise ValueError("User ID / Email and Phone Number are required.")
@@ -394,11 +395,11 @@ def verify_user_phone(user_id_or_email: str, phone: str) -> dict:
 
     return user
 
-def update_user_password_direct(user_id: str, new_password: str) -> dict:
+def update_user_password_direct(user_id: Any, new_password: Any) -> Optional[dict]:
     """Updates user password hash directly by user_id."""
     from backend.utils.security import hash_password
 
-    clean_pw = str(new_password).strip()
+    clean_pw = str(new_password).strip() if new_password is not None else ''
     if not clean_pw:
         raise ValueError("New password cannot be empty.")
 
@@ -415,7 +416,7 @@ def update_user_password_direct(user_id: str, new_password: str) -> dict:
 
     return get_user_by_id(user_id)
 
-def verify_and_update_user_password(user_id: str, current_password: str, new_password: str) -> bool:
+def verify_and_update_user_password(user_id: Any, current_password: Any, new_password: Any) -> bool:
     """Verifies user's current password before changing to new password."""
     from backend.utils.security import verify_password, hash_password
 
@@ -423,10 +424,10 @@ def verify_and_update_user_password(user_id: str, current_password: str, new_pas
     if not user:
         raise ValueError("User not found.")
 
-    if not verify_password(current_password, user['password_hash']):
+    if not verify_password(str(current_password), user['password_hash']):
         raise ValueError("Current password is incorrect.")
 
-    clean_new = str(new_password).strip()
+    clean_new = str(new_password).strip() if new_password is not None else ''
     if not clean_new or len(clean_new) < 6:
         raise ValueError("New password must be at least 6 characters long.")
 
@@ -442,7 +443,7 @@ def verify_and_update_user_password(user_id: str, current_password: str, new_pas
 # OTP Password Reset Management
 # ==============================================================================
 
-def generate_and_store_otp(user_id_or_email: str, phone: str) -> dict:
+def generate_and_store_otp(user_id_or_email: Any, phone: Any) -> dict:
     """Verifies phone and generates a 6-digit OTP code valid for 10 minutes."""
     user = verify_user_phone(user_id_or_email, phone)
     u_id = user['user_id']
@@ -466,7 +467,7 @@ def generate_and_store_otp(user_id_or_email: str, phone: str) -> dict:
         'message': f"OTP sent to {user['phone'][-4:].rjust(len(user['phone']), '*')}."
     }
 
-def verify_otp_and_reset_password(user_id_or_email: str, otp: str, new_password: str) -> dict:
+def verify_otp_and_reset_password(user_id_or_email: Any, otp: Any, new_password: Any) -> Optional[dict]:
     """Verifies OTP and updates the user's password."""
     user = get_user_by_id_or_email(user_id_or_email)
     if not user:
@@ -499,7 +500,7 @@ def verify_otp_and_reset_password(user_id_or_email: str, otp: str, new_password:
 # Punch & Attendance Operations
 # ==============================================================================
 
-def get_user_punch_info_today(user_id: str) -> dict:
+def get_user_punch_info_today(user_id: Any) -> dict:
     """Returns Punch In and Punch Out status for today in IST."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -533,7 +534,7 @@ def get_user_punch_info_today(user_id: str) -> dict:
         'punch_count': len(rows)
     }
 
-def calculate_periods_status(punch_in: str, punch_out: str) -> list:
+def calculate_periods_status(punch_in: Optional[str], punch_out: Optional[str] = None) -> list:
     """
     Calculates attendance status for Periods 1 through 7:
     - 1st Punch (Punch IN): Grants Present status for the first four periods (P1, P2, P3, P4).
@@ -544,7 +545,7 @@ def calculate_periods_status(punch_in: str, punch_out: str) -> list:
         return [{'period': i, 'status': 'ABSENT', 'label': f'P{i}'} for i in range(1, 8)]
 
     try:
-        t_out = punch_out.time() if isinstance(punch_out, datetime) else (datetime.strptime(punch_out, '%Y-%m-%d %H:%M:%S').time() if punch_out else None)
+        t_out = punch_out.time() if isinstance(punch_out, datetime) else (datetime.strptime(str(punch_out), '%Y-%m-%d %H:%M:%S').time() if punch_out else None)
 
         period_times = [
             (1, time(9, 0), time(9, 50)),
@@ -571,7 +572,7 @@ def calculate_periods_status(punch_in: str, punch_out: str) -> list:
     except Exception:
         return [{'period': i, 'status': 'PRESENT' if i <= 4 else 'ABSENT', 'label': f'P{i}'} for i in range(1, 8)]
 
-def process_daily_absentees(target_date: str = None) -> dict:
+def process_daily_absentees(target_date: Optional[str] = None) -> dict:
     """
     Records ABSENT status for active users who did not punch in on target_date (default: today in IST).
     """
@@ -629,7 +630,7 @@ def process_daily_absentees(target_date: str = None) -> dict:
         'newly_marked_absent': marked_count
     }
 
-def get_user_daily_summary(user_id: str, limit_days: int = 30) -> list:
+def get_user_daily_summary(user_id: Any, limit_days: int = 30) -> list:
     """Aggregates attendance logs by day to return Punch In, Punch Out, total duration, 1 to 7 period attendance, including ABSENT status when user did not punch."""
     process_daily_absentees()
 
@@ -668,8 +669,8 @@ def get_user_daily_summary(user_id: str, limit_days: int = 30) -> list:
             duration_str = None
             if p_out:
                 try:
-                    t1 = p_in if isinstance(p_in, datetime) else datetime.strptime(p_in, '%Y-%m-%d %H:%M:%S')
-                    t2 = p_out if isinstance(p_out, datetime) else datetime.strptime(p_out, '%Y-%m-%d %H:%M:%S')
+                    t1 = p_in if isinstance(p_in, datetime) else datetime.strptime(str(p_in), '%Y-%m-%d %H:%M:%S')
+                    t2 = p_out if isinstance(p_out, datetime) else datetime.strptime(str(p_out), '%Y-%m-%d %H:%M:%S')
                     diff_sec = int((t2 - t1).total_seconds())
                     hrs = diff_sec // 3600
                     mins = (diff_sec % 3600) // 60
@@ -702,7 +703,7 @@ def get_user_daily_summary(user_id: str, limit_days: int = 30) -> list:
     conn.close()
     return summary
 
-def calculate_user_attendance_stats(user_id: str) -> dict:
+def calculate_user_attendance_stats(user_id: Any) -> dict:
     """Calculates attendance metrics, percentage, and today's Punch In / Punch Out for a given user."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -753,7 +754,7 @@ def calculate_user_attendance_stats(user_id: str) -> dict:
 # Late Permission Slip Operations
 # ==============================================================================
 
-def record_late_punch_in(user_id: str, in_time: str) -> dict:
+def record_late_punch_in(user_id: Any, in_time: Any) -> Optional[dict]:
     """Sets user status to 'blocked_late' and creates a late permission slip."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -781,7 +782,7 @@ def record_late_punch_in(user_id: str, in_time: str) -> dict:
     conn.close()
     return get_user_latest_late_slip(user_id)
 
-def get_user_latest_late_slip(user_id: str) -> dict:
+def get_user_latest_late_slip(user_id: Any) -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -795,8 +796,8 @@ def get_user_latest_late_slip(user_id: str) -> dict:
     conn.close()
     return row_to_dict(row)
 
-def update_late_slip_reason(user_id: str, slip_id: int, reason: str) -> dict:
-    clean_reason = str(reason).strip()
+def update_late_slip_reason(user_id: Any, slip_id: int, reason: Any) -> Optional[dict]:
+    clean_reason = str(reason).strip() if reason is not None else ''
     if not clean_reason:
         raise ValueError("Please provide a valid reason for late arrival.")
     conn = get_db_connection()
@@ -823,7 +824,7 @@ def get_all_pending_late_slips() -> list:
     conn.close()
     return rows_to_list(rows)
 
-def admin_unblock_late_user(user_id: str, admin_id: str = 'admin') -> bool:
+def admin_unblock_late_user(user_id: Any, admin_id: str = 'admin') -> bool:
     """Removes late block from user account and approves their late permission slip."""
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -849,7 +850,7 @@ def admin_unblock_late_user(user_id: str, admin_id: str = 'admin') -> bool:
 # WebAuthn Credentials Model Operations
 # ==============================================================================
 
-def create_credential(user_id: str, credential_id: str, public_key: str, sign_count: int = 0, credential_name: str = "SmartDevice Passkey") -> dict:
+def create_credential(user_id: Any, credential_id: Any, public_key: Any, sign_count: int = 0, credential_name: str = "SmartDevice Passkey") -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -862,7 +863,7 @@ def create_credential(user_id: str, credential_id: str, public_key: str, sign_co
     conn.close()
     return row_to_dict(row)
 
-def get_credentials_by_user(user_id: str) -> list:
+def get_credentials_by_user(user_id: Any) -> list:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM webauthn_credentials WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
@@ -870,7 +871,7 @@ def get_credentials_by_user(user_id: str) -> list:
     conn.close()
     return rows_to_list(rows)
 
-def get_credential_by_id(credential_id: str) -> dict:
+def get_credential_by_id(credential_id: Any) -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM webauthn_credentials WHERE credential_id = ?", (credential_id,))
@@ -878,7 +879,7 @@ def get_credential_by_id(credential_id: str) -> dict:
     conn.close()
     return row_to_dict(row)
 
-def update_credential_sign_count(credential_id: str, new_sign_count: int) -> bool:
+def update_credential_sign_count(credential_id: Any, new_sign_count: int) -> bool:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -891,7 +892,7 @@ def update_credential_sign_count(credential_id: str, new_sign_count: int) -> boo
     conn.close()
     return affected > 0
 
-def delete_credential(user_id: str, credential_id: str) -> bool:
+def delete_credential(user_id: Any, credential_id: Any) -> bool:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -908,7 +909,7 @@ def delete_credential(user_id: str, credential_id: str) -> bool:
 # Geofence Settings Model Operations
 # ==============================================================================
 
-def get_geofence_settings() -> dict:
+def get_geofence_settings() -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM geofence_settings ORDER BY id ASC LIMIT 1")
@@ -916,7 +917,7 @@ def get_geofence_settings() -> dict:
     conn.close()
     return row_to_dict(row)
 
-def update_geofence_settings(location_name: str, latitude: float, longitude: float, radius_meters: float, max_gps_accuracy_meters: float = 50.0, is_demo_mode: bool = False) -> dict:
+def update_geofence_settings(location_name: str, latitude: float, longitude: float, radius_meters: float, max_gps_accuracy_meters: float = 50.0, is_demo_mode: bool = False) -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM geofence_settings ORDER BY id ASC LIMIT 1")
@@ -944,7 +945,7 @@ def update_geofence_settings(location_name: str, latitude: float, longitude: flo
 # Authentication Logs Model Operations
 # ==============================================================================
 
-def log_authentication_event(user_id: str, latitude: float, longitude: float, gps_accuracy: float, calculated_distance: float, result: str, failure_reason: str = None, credential_id: str = None, ip_address: str = None, user_agent: str = None) -> dict:
+def log_authentication_event(user_id: Any, latitude: float, longitude: float, gps_accuracy: float, calculated_distance: float, result: str, failure_reason: Optional[str] = None, credential_id: Optional[str] = None, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
     ist_time = get_ist_now()
@@ -962,7 +963,7 @@ def log_authentication_event(user_id: str, latitude: float, longitude: float, gp
     conn.close()
     return row_to_dict(row)
 
-def get_user_logs(user_id: str, limit: int = 100) -> list:
+def get_user_logs(user_id: Any, limit: int = 100) -> list:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -975,7 +976,7 @@ def get_user_logs(user_id: str, limit: int = 100) -> list:
     conn.close()
     return rows_to_list(rows)
 
-def get_admin_logs(date_filter: str = None, status_filter: str = None, search: str = None, limit: int = 500) -> list:
+def get_admin_logs(date_filter: Optional[str] = None, status_filter: Optional[str] = None, search: Optional[str] = None, limit: int = 500) -> list:
     conn = get_db_connection()
     cursor = conn.cursor()
 
