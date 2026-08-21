@@ -16,7 +16,7 @@ def get_current_rp_id(rp_id: str = None) -> str:
         host = request.host.split(':')[0]
         if host:
             return host
-    return Config.WEBAUTHN_RP_ID
+    return Config.WEBAUTHN_RP_ID or "localhost"
 
 def get_current_origin(origin: str = None) -> str:
     """Returns the effective WebAuthn origin matching current request or config."""
@@ -26,16 +26,20 @@ def get_current_origin(origin: str = None) -> str:
         req_origin = request.headers.get('Origin')
         if req_origin:
             return req_origin
-        return f"{request.scheme}://{request.host}"
-    return Config.WEBAUTHN_ORIGIN
+        scheme = request.headers.get('X-Forwarded-Proto', request.scheme or 'http')
+        return f"{scheme}://{request.host}"
+    return Config.WEBAUTHN_ORIGIN or "http://localhost:5000"
 
 def get_webauthn_registration_options(user_id: str, full_name: str, existing_credentials=None, rp_id: str = None):
     """
     Generates WebAuthn registration options for a user.
     Returns (options_json_str, challenge_base64url_str)
     """
-    effective_rp_id = get_current_rp_id(rp_id)
-    user_id_bytes = user_id.encode('utf-8')
+    effective_rp_id = get_current_rp_id(rp_id) or "localhost"
+    rp_name = Config.WEBAUTHN_RP_NAME or "FXEC BIOMETRIC Auth System"
+    clean_user_id = str(user_id or 'user').strip()
+    clean_display_name = str(full_name or clean_user_id or 'User').strip()
+    user_id_bytes = clean_user_id.encode('utf-8')
     
     exclude_credentials = []
     if existing_credentials:
@@ -47,10 +51,10 @@ def get_webauthn_registration_options(user_id: str, full_name: str, existing_cre
 
     options = webauthn.generate_registration_options(
         rp_id=effective_rp_id,
-        rp_name=Config.WEBAUTHN_RP_NAME,
+        rp_name=rp_name,
         user_id=user_id_bytes,
-        user_name=user_id,
-        user_display_name=full_name,
+        user_name=clean_user_id,
+        user_display_name=clean_display_name,
         exclude_credentials=exclude_credentials,
         authenticator_selection=structs.AuthenticatorSelectionCriteria(
             user_verification=structs.UserVerificationRequirement.PREFERRED,
@@ -97,7 +101,7 @@ def get_webauthn_authentication_options(user_credentials, rp_id: str = None):
     Generates WebAuthn authentication assertion options.
     Returns (options_json_str, challenge_base64url_str)
     """
-    effective_rp_id = get_current_rp_id(rp_id)
+    effective_rp_id = get_current_rp_id(rp_id) or "localhost"
     allow_credentials = []
     if user_credentials:
         for cred in user_credentials:
@@ -122,7 +126,7 @@ def verify_webauthn_authentication(credential_payload, expected_challenge_b64: s
     Verifies the WebAuthn authentication assertion response.
     Returns new_sign_count.
     """
-    effective_rp_id = get_current_rp_id(rp_id)
+    effective_rp_id = get_current_rp_id(rp_id) or "localhost"
     effective_origin = get_current_origin(origin)
     expected_challenge_bytes = base64url_to_bytes(expected_challenge_b64)
     public_key_bytes = base64url_to_bytes(public_key_b64)
