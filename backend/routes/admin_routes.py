@@ -8,7 +8,8 @@ from backend.models.schemas import (
     get_credentials_by_user, create_user, get_user_by_id, get_user_by_email,
     update_user_details, process_daily_absentees, get_user_full_details,
     update_user_password_direct, delete_credential, admin_unblock_late_user,
-    get_all_pending_late_slips
+    get_all_pending_late_slips, unbind_user_device, unbind_device_by_id,
+    get_all_device_bindings
 )
 from backend.utils.security import admin_required, hash_password
 from backend.services.geofence import validate_coordinates
@@ -395,3 +396,38 @@ def trigger_process_absent():
         'message': f"Daily attendance processed for {res['target_date']}: {res['present_count']} present, {res['absent_count']} absent ({res['newly_marked_absent']} newly recorded as ABSENT).",
         'data': res
     })
+
+@admin_bp.route('/users/<user_id>/unbind-device', methods=['POST'])
+@admin_required
+def admin_unbind_user_device_route(user_id):
+    """Unbinds/resets the registered device for a user account, allowing them to bind a new device."""
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'success': False, 'message': f'User "{user_id}" not found.'}), 404
+
+    success = unbind_user_device(user['user_id'])
+    return jsonify({
+        'success': True,
+        'message': f"Device binding for user '{user['user_id']}' ({user['full_name']}) has been successfully reset. The user can now register and authenticate from their new device."
+    })
+
+@admin_bp.route('/devices', methods=['GET'])
+@admin_required
+def list_all_devices():
+    """Returns list of all active user device bindings."""
+    devices = get_all_device_bindings()
+    return jsonify({
+        'success': True,
+        'total': len(devices),
+        'devices': devices
+    })
+
+@admin_bp.route('/devices/<device_id>', methods=['DELETE'])
+@admin_required
+def delete_device_binding(device_id):
+    """Unbinds a specific device by its device_id."""
+    success = unbind_device_by_id(device_id)
+    if success:
+        return jsonify({'success': True, 'message': 'Device successfully unbound.'})
+    return jsonify({'success': False, 'message': 'Device binding not found.'}), 404
+

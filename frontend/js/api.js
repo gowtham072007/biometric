@@ -1,14 +1,52 @@
 /* ==========================================================================
-   API Service Wrapper — REST Endpoints & Client Session Management
+   API Service Wrapper — REST Endpoints, Device Binding & Client Session
    ========================================================================== */
 
 const API = {
   baseUrl: '/api',
 
+  /**
+   * Returns or generates a persistent unique Device ID stored in localStorage & cookie.
+   */
+  getDeviceId() {
+    try {
+      let devId = localStorage.getItem('fxec_device_id');
+      if (!devId) {
+        // Generate cryptographic random UUID
+        if (window.crypto && window.crypto.randomUUID) {
+          devId = 'dev_' + window.crypto.randomUUID().replace(/-/g, '');
+        } else {
+          devId = 'dev_' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+        }
+        localStorage.setItem('fxec_device_id', devId);
+      }
+      return devId;
+    } catch (e) {
+      return 'dev_fallback_' + navigator.userAgent.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
+    }
+  },
+
+  /**
+   * Returns a friendly device name based on user agent and platform.
+   */
+  getDeviceName() {
+    const ua = navigator.userAgent;
+    let name = 'Web Browser';
+    if (/android/i.test(ua)) name = 'Android Smartphone';
+    else if (/iphone/i.test(ua)) name = 'Apple iPhone';
+    else if (/ipad/i.test(ua)) name = 'Apple iPad';
+    else if (/macintosh|mac os x/i.test(ua)) name = 'Apple Mac';
+    else if (/windows/i.test(ua)) name = 'Windows PC';
+    else if (/linux/i.test(ua)) name = 'Linux Computer';
+    return name;
+  },
+
   async request(endpoint, options = {}) {
+    const devId = this.getDeviceId();
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        'X-Device-Id': devId,
         ...options.headers
       },
       credentials: 'include', // Always send HTTP-only session cookies
@@ -40,7 +78,12 @@ const API = {
   },
 
   loginUser(credentials) {
-    return this.request('/login', { method: 'POST', body: credentials });
+    const payload = {
+      ...credentials,
+      device_id: this.getDeviceId(),
+      device_name: this.getDeviceName()
+    };
+    return this.request('/login', { method: 'POST', body: payload });
   },
 
   resetPassword(data) {
@@ -90,19 +133,48 @@ const API = {
 
   // WebAuthn Endpoints
   getWebAuthnRegisterOptions(user_id) {
-    return this.request('/webauthn/register/options', { method: 'POST', body: { user_id } });
+    return this.request('/webauthn/register/options', { 
+      method: 'POST', 
+      body: { 
+        user_id,
+        device_id: this.getDeviceId()
+      } 
+    });
   },
 
   verifyWebAuthnRegister(credential, credential_name, user_id) {
-    return this.request('/webauthn/register/verify', { method: 'POST', body: { credential, credential_name, user_id } });
+    return this.request('/webauthn/register/verify', { 
+      method: 'POST', 
+      body: { 
+        credential, 
+        credential_name, 
+        user_id,
+        device_id: this.getDeviceId(),
+        device_name: credential_name || this.getDeviceName()
+      } 
+    });
   },
 
   getWebAuthnLoginOptions(user_id, locationData) {
-    return this.request('/webauthn/login/options', { method: 'POST', body: { user_id, ...locationData } });
+    return this.request('/webauthn/login/options', { 
+      method: 'POST', 
+      body: { 
+        user_id, 
+        device_id: this.getDeviceId(),
+        ...locationData 
+      } 
+    });
   },
 
   verifyWebAuthnLogin(credential, locationData) {
-    return this.request('/webauthn/login/verify', { method: 'POST', body: { credential, ...locationData } });
+    return this.request('/webauthn/login/verify', { 
+      method: 'POST', 
+      body: { 
+        credential, 
+        device_id: this.getDeviceId(),
+        ...locationData 
+      } 
+    });
   },
 
   // Admin Endpoints
@@ -137,6 +209,18 @@ const API = {
 
   adminResetUserPassword(user_id, new_password) {
     return this.request(`/admin/users/${encodeURIComponent(user_id)}/reset-password`, { method: 'POST', body: { new_password } });
+  },
+
+  adminUnbindUserDevice(user_id) {
+    return this.request(`/admin/users/${encodeURIComponent(user_id)}/unbind-device`, { method: 'POST' });
+  },
+
+  adminGetDevices() {
+    return this.request('/admin/devices', { method: 'GET' });
+  },
+
+  adminUnbindDeviceById(device_id) {
+    return this.request(`/admin/devices/${encodeURIComponent(device_id)}`, { method: 'DELETE' });
   },
 
   deleteUser(user_id) {
@@ -193,3 +277,4 @@ const API = {
     return this.request(`/admin/users/${encodeURIComponent(user_id)}/credentials/${encodeURIComponent(credential_id)}`, { method: 'DELETE' });
   }
 };
+

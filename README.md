@@ -9,10 +9,11 @@ Production-ready, mobile-first web application for location-restricted biometric
 This application provides secure physical attendance verification for colleges, corporate offices, or organization sites. Users can authenticate using their smartphone's native biometric hardware (Fingerprint, Face ID, or Device PIN), but authentication is strictly permitted **only when the user is physically inside an administrator-configured geographic radius** around an authorized location center.
 
 ### Key Highlights
+* **Strict 1-User-Per-Device Policy**: Anti-proxy attendance mechanism ensuring each physical hardware device is exclusively bound to a single user account, preventing buddy punching or account sharing on one phone.
 * **Zero Raw Biometric Storage**: Fingerprint and Face ID data never leave the user's device. Public-key cryptography (WebAuthn / FIDO2) handles authentication via operating system prompts.
 * **Server-Enforced Geofencing**: Physical distance to the target location center is independently calculated on the server using the Haversine formula. Frontend Boolean flags are never trusted.
 * **Mobile-First PWA Support**: Responsive dark-mode card layout with bottom navigation, installable PWA manifest, offline app shell caching via Service Worker, and touch-optimized biometric triggers.
-* **Full Administrative Controls**: Admin dashboard with attendance analytics, user activation/deactivation, interactive Leaflet map coordinate picker, date/status log filters, and one-click CSV report exports.
+* **Full Administrative Controls**: Admin dashboard with attendance analytics, user activation/deactivation, device unbind/reset controls, interactive Leaflet map coordinate picker, date/status log filters, and one-click CSV report exports.
 
 ---
 

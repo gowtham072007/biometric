@@ -102,10 +102,12 @@ def get_all_users(search_query: Optional[str] = None, status_filter: Optional[st
 
     query = """
         SELECT u.id, u.user_id, u.full_name, u.email, u.phone, u.role, u.status, u.created_at, u.updated_at,
+               d.device_id, d.device_name, d.registered_at as device_registered_at, d.last_active_at as device_last_active,
                COUNT(DISTINCT c.id) as credential_count,
                COUNT(DISTINCT CASE WHEN l.result = 'SUCCESS' THEN DATE(l.timestamp) END) as present_days,
                MAX(l.timestamp) as last_auth_time
         FROM users u
+        LEFT JOIN user_devices d ON u.user_id = d.user_id
         LEFT JOIN webauthn_credentials c ON u.user_id = c.user_id
         LEFT JOIN authentication_logs l ON u.user_id = l.user_id
         WHERE 1=1
@@ -125,7 +127,7 @@ def get_all_users(search_query: Optional[str] = None, status_filter: Optional[st
         query += " AND u.role = ?"
         params.append(role_filter.lower())
 
-    query += " GROUP BY u.id"
+    query += " GROUP BY u.id, d.device_id, d.device_name, d.registered_at, d.last_active_at"
 
     # Sorting
     if sort_by == 'name_asc':
@@ -157,7 +159,7 @@ def get_all_users(search_query: Optional[str] = None, status_filter: Optional[st
     return user_list
 
 def get_user_full_details(user_id: Any) -> Optional[dict]:
-    """Returns detailed user profile including credentials, attendance summary, today's punch, logs, and late slips."""
+    """Returns detailed user profile including credentials, device, attendance summary, today's punch, logs, and late slips."""
     user = get_user_by_id(user_id)
     if not user:
         return None
@@ -167,6 +169,7 @@ def get_user_full_details(user_id: Any) -> Optional[dict]:
     user_data.pop('password_hash', None)
 
     creds = get_credentials_by_user(user['user_id'])
+    device = get_device_by_user_id(user['user_id'])
     stats = calculate_user_attendance_stats(user['user_id'])
     punch_today = get_user_punch_info_today(user['user_id'])
     recent_logs = get_user_logs(user['user_id'], limit=15)
@@ -175,6 +178,7 @@ def get_user_full_details(user_id: Any) -> Optional[dict]:
     return {
         'user': user_data,
         'credentials': creds,
+        'device': device,
         'attendance_stats': stats,
         'today_punch': punch_today,
         'recent_logs': recent_logs,
@@ -225,6 +229,7 @@ def update_user_details(user_id: Any, new_user_id: Optional[str] = None, full_na
                 # Temporarily disable foreign keys for manual cascading update in SQLite
                 cursor.execute("PRAGMA foreign_keys = OFF;")
                 cursor.execute("UPDATE users SET user_id = ? WHERE user_id = ?", (clean_new_id, user_id))
+                cursor.execute("UPDATE user_devices SET user_id = ? WHERE user_id = ?", (clean_new_id, user_id))
                 cursor.execute("UPDATE webauthn_credentials SET user_id = ? WHERE user_id = ?", (clean_new_id, user_id))
                 cursor.execute("UPDATE authentication_logs SET user_id = ? WHERE user_id = ?", (clean_new_id, user_id))
                 cursor.execute("UPDATE late_permission_slips SET user_id = ? WHERE user_id = ?", (clean_new_id, user_id))
@@ -354,6 +359,7 @@ def delete_user(user_id: Any) -> bool:
     conn = get_db_connection()
     cursor = conn.cursor()
     # Explicitly delete related records to be completely safe
+    cursor.execute("DELETE FROM user_devices WHERE user_id = ?", (user_id,))
     cursor.execute("DELETE FROM webauthn_credentials WHERE user_id = ?", (user_id,))
     cursor.execute("DELETE FROM authentication_logs WHERE user_id = ?", (user_id,))
     cursor.execute("DELETE FROM late_permission_slips WHERE user_id = ?", (user_id,))
@@ -1086,4 +1092,167 @@ def get_dashboard_stats() -> dict:
         'today_failed': today_failed,
         'users_inside_today': users_inside_today,
         'avg_attendance_percentage': avg_pct
+    }
+
+
+# ==============================================================================
+# User Device Model Operations (1 User per Device, 1 Device per User)
+# ==============================================================================
+
+def get_device_by_user_id(user_id: Any) -> Optional[dict]:
+    """Retrieves the single registered device for a user."""
+    if not user_id:
+        return None
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM user_devices WHERE user_id = ?", (str(user_id).strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+def get_device_by_device_id(device_id: Any) -> Optional[dict]:
+    """Retrieves the device binding and associated user for a given device_id."""
+    if not device_id:
+        return None
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT d.*, u.full_name, u.email, u.role, u.status as user_status
+        FROM user_devices d
+        JOIN users u ON d.user_id = u.user_id
+        WHERE d.device_id = ?
+    """, (str(device_id).strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    return row_to_dict(row)
+
+def bind_user_device(user_id: Any, device_id: Any, device_name: Optional[str] = None, user_agent: Optional[str] = None, ip_address: Optional[str] = None) -> Optional[dict]:
+    """
+    Binds a unique device_id to a user_id ensuring:
+    1) One user per device (device_id cannot be registered to another user).
+    2) One device per user (user_id cannot have multiple devices bound simultaneously).
+    """
+    u_id = str(user_id).strip()
+    d_id = str(device_id).strip()
+    if not u_id or not d_id:
+        raise ValueError("User ID and Device ID are required for device registration.")
+
+    user = get_user_by_id(u_id)
+    if not user:
+        raise ValueError(f"User '{u_id}' not found.")
+
+    # Check if this device is already bound to another user
+    existing_device_user = get_device_by_device_id(d_id)
+    if existing_device_user and existing_device_user['user_id'] != u_id:
+        owner_name = existing_device_user.get('full_name', existing_device_user['user_id'])
+        raise ValueError(f"This device is already registered to user '{existing_device_user['user_id']}' ({owner_name}). Only 1 user is permitted per device.")
+
+    # Check if this user already has another device bound
+    user_current_device = get_device_by_user_id(u_id)
+    if user_current_device and user_current_device['device_id'] != d_id:
+        dev_label = user_current_device.get('device_name') or (user_current_device['device_id'][:12] + '...')
+        raise ValueError(f"Your account is already bound to another device ('{dev_label}'). Only 1 device per user is allowed. Please use your registered device or contact an administrator to reset your device binding.")
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    d_name = str(device_name).strip() if device_name else "User Device"
+
+    if user_current_device:
+        cursor.execute("""
+            UPDATE user_devices
+            SET last_active_at = CURRENT_TIMESTAMP,
+                device_name = COALESCE(?, device_name),
+                user_agent = COALESCE(?, user_agent),
+                ip_address = COALESCE(?, ip_address)
+            WHERE user_id = ? AND device_id = ?
+        """, (d_name, user_agent, ip_address, u_id, d_id))
+    else:
+        cursor.execute("""
+            INSERT INTO user_devices (user_id, device_id, device_name, user_agent, ip_address, registered_at, last_active_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        """, (u_id, d_id, d_name, user_agent, ip_address))
+
+    conn.commit()
+    conn.close()
+    return get_device_by_user_id(u_id)
+
+def unbind_user_device(user_id: Any) -> bool:
+    """Removes device binding for a user (used by Admin to reset device)."""
+    if not user_id:
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_devices WHERE user_id = ?", (str(user_id).strip(),))
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+def unbind_device_by_id(device_id: Any) -> bool:
+    """Removes device binding by device_id."""
+    if not device_id:
+        return False
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_devices WHERE device_id = ?", (str(device_id).strip(),))
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+def get_all_device_bindings() -> list:
+    """Returns list of all active user device bindings for admin dashboard."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT d.*, u.full_name, u.email, u.phone, u.role, u.status as user_status
+        FROM user_devices d
+        JOIN users u ON d.user_id = u.user_id
+        ORDER BY d.last_active_at DESC
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    return rows_to_list(rows)
+
+def check_device_permission(user_id: Any, device_id: Any, is_admin: bool = False) -> dict:
+    """
+    Checks if a user is permitted to authenticate/login from a given device.
+    Admin accounts are exempt from single-device lock.
+    """
+    if is_admin:
+        return {'allowed': True, 'reason': None, 'is_admin': True, 'device': None}
+
+    u_id = str(user_id).strip() if user_id else ''
+    d_id = str(device_id).strip() if device_id else ''
+
+    if not d_id:
+        return {'allowed': False, 'reason': 'Device ID is required for device verification.', 'device': None}
+
+    # 1. Is this device already registered to another user?
+    existing_device_user = get_device_by_device_id(d_id)
+    if existing_device_user and existing_device_user['user_id'] != u_id:
+        owner_name = existing_device_user.get('full_name', existing_device_user['user_id'])
+        return {
+            'allowed': False,
+            'reason': f"This device is already registered to user '{existing_device_user['user_id']}' ({owner_name}). Only 1 user is permitted per device.",
+            'bound_to_other': True,
+            'other_user_id': existing_device_user['user_id']
+        }
+
+    # 2. Does this user have a different registered device?
+    user_device = get_device_by_user_id(u_id)
+    if user_device and user_device['device_id'] != d_id:
+        dev_label = user_device.get('device_name') or (user_device['device_id'][:12] + '...')
+        return {
+            'allowed': False,
+            'reason': f"Your account is already bound to another registered device ('{dev_label}'). Only 1 device per user is allowed. Please use your registered device or contact an administrator to reset.",
+            'different_device': True,
+            'registered_device_id': user_device['device_id']
+        }
+
+    return {
+        'allowed': True,
+        'reason': None,
+        'has_registered_device': bool(user_device),
+        'device': user_device
     }

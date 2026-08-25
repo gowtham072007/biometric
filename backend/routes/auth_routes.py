@@ -4,7 +4,8 @@ from backend.models.schemas import (
     create_user, get_user_by_id, get_user_by_email, get_user_by_id_or_email,
     get_credentials_by_user, update_own_profile, verify_and_update_user_password,
     reset_user_password, generate_and_store_otp, verify_otp_and_reset_password,
-    calculate_user_attendance_stats, get_user_latest_late_slip, update_late_slip_reason
+    calculate_user_attendance_stats, get_user_latest_late_slip, update_late_slip_reason,
+    get_device_by_user_id, bind_user_device, check_device_permission
 )
 from backend.utils.security import hash_password, verify_password, login_required, admin_required
 
@@ -59,10 +60,12 @@ def register():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """Password login endpoint for users and admins."""
+    """Password login endpoint with 1-user-per-device verification."""
     data = request.get_json() or {}
     user_id_or_email = str(data.get('user_id', '') or '').strip()
     password = str(data.get('password', '') or '').strip()
+    device_id = str(data.get('device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
+    device_name = str(data.get('device_name', '') or '').strip()
 
     if not user_id_or_email or not password:
         return jsonify({'success': False, 'message': 'User ID / Email and password are required.'}), 400
@@ -75,9 +78,35 @@ def login():
     if user['status'] == 'inactive':
         return jsonify({'success': False, 'message': 'Account is inactive. Please contact system administrator.'}), 403
 
+    # Device binding check (Enforce 1 user per device & 1 device per user for non-admin accounts)
+    is_admin = (user.get('role') == 'admin')
+    if not is_admin and device_id:
+        perm = check_device_permission(user['user_id'], device_id, is_admin=False)
+        if not perm['allowed']:
+            return jsonify({
+                'success': False,
+                'message': perm['reason'],
+                'device_blocked': True
+            }), 403
+
+        try:
+            bind_user_device(
+                user_id=user['user_id'],
+                device_id=device_id,
+                device_name=device_name or "Smart Device",
+                user_agent=request.user_agent.string,
+                ip_address=request.remote_addr
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'message': str(e), 'device_blocked': True}), 403
+
     session['user_id'] = user['user_id']
     session['role'] = user['role']
     session['full_name'] = user['full_name']
+    if device_id:
+        session['device_id'] = device_id
+
+    bound_device = get_device_by_user_id(user['user_id'])
 
     return jsonify({
         'success': True,
@@ -88,7 +117,8 @@ def login():
             'email': user['email'],
             'phone': user['phone'],
             'role': user['role'],
-            'status': user['status']
+            'status': user['status'],
+            'device': bound_device
         }
     })
 
@@ -114,6 +144,7 @@ def user_me():
 
         creds = get_credentials_by_user(user['user_id'])
         has_webauthn = len(creds) > 0
+        device = get_device_by_user_id(user['user_id'])
 
         return jsonify({
             'authenticated': True,
@@ -125,7 +156,8 @@ def user_me():
                 'role': user['role'],
                 'status': user['status'],
                 'has_webauthn': has_webauthn,
-                'credential_count': len(creds)
+                'credential_count': len(creds),
+                'device': device
             }
         })
 

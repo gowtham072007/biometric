@@ -228,6 +228,21 @@ def _init_postgres_db():
     );
     """)
 
+    # Table: user_devices (1 User per Device, 1 Device per User)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_devices (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(100) UNIQUE NOT NULL,
+        device_id VARCHAR(255) UNIQUE NOT NULL,
+        device_name VARCHAR(255),
+        user_agent TEXT,
+        ip_address VARCHAR(100),
+        registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    );
+    """)
+
     conn.commit()
 
     # Seed Default Geofence Settings if empty
@@ -331,6 +346,21 @@ def _init_sqlite_db(db_path=None):
         approved_by TEXT,
         approved_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    );
+    """)
+
+    # Table: user_devices (1 User per Device, 1 Device per User)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_devices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT UNIQUE NOT NULL,
+        device_id TEXT UNIQUE NOT NULL,
+        device_name TEXT,
+        user_agent TEXT,
+        ip_address TEXT,
+        registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
     );
     """)

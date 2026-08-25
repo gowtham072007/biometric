@@ -366,6 +366,20 @@
           </div>
         </div>
 
+        <!-- Registered Device Binding Section -->
+        <div style="background: rgba(59, 130, 246, 0.08); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(59, 130, 246, 0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--text-main); margin: 0;">📱 Registered Hardware Device (1-User Policy)</h4>
+            <div id="detailDeviceActionContainer"></div>
+          </div>
+          <div id="detailDeviceContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 0.82rem;">
+            <div><span style="color: var(--text-dim); display: block; font-size: 0.72rem;">DEVICE NAME</span><strong id="detailDevName">No Device Bound</strong></div>
+            <div><span style="color: var(--text-dim); display: block; font-size: 0.72rem;">DEVICE ID</span><strong id="detailDevId" style="font-family: monospace;">--</strong></div>
+            <div><span style="color: var(--text-dim); display: block; font-size: 0.72rem;">BOUND DATE</span><strong id="detailDevRegistered">--</strong></div>
+            <div><span style="color: var(--text-dim); display: block; font-size: 0.72rem;">LAST ACTIVE</span><strong id="detailDevLastActive">--</strong></div>
+          </div>
+        </div>
+
         <!-- Registered Passkeys Section -->
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -759,6 +773,7 @@
                 <div class="action-btn-group" style="justify-content: flex-end;">
                   <button onclick="openViewUserModal('${escapeAttr(u.user_id)}')" class="btn btn-secondary" style="width:auto; padding:4px 8px; font-size:0.75rem;" title="View Full Profile">👁️ Details</button>
                   <button onclick="openEditUserModal('${escapeAttr(u.user_id)}', '${escapeAttr(u.full_name)}', '${escapeAttr(u.email)}', '${escapeAttr(u.phone)}', '${escapeAttr(u.role)}', '${escapeAttr(u.status)}')" class="btn btn-secondary" style="width:auto; padding:4px 8px; font-size:0.75rem;" title="Edit User">✏️ Edit</button>
+                  ${u.device_id ? `<button onclick="handleAdminUnbindDevice('${escapeAttr(u.user_id)}', '${escapeAttr(u.full_name)}')" class="btn btn-secondary" style="width:auto; padding:4px 8px; font-size:0.75rem; color: var(--warning);" title="Unbind Registered Device">📱 Unbind</button>` : ''}
                   <button onclick="openResetPasswordModal('${escapeAttr(u.user_id)}', '${escapeAttr(u.full_name)}')" class="btn btn-secondary" style="width:auto; padding:4px 8px; font-size:0.75rem;" title="Reset Password">🔑 Reset</button>
                   ${isBlockedLate ? `<button onclick="confirmUnblockLate('${escapeAttr(u.user_id)}')" class="btn btn-warning" style="width:auto; padding:4px 8px; font-size:0.75rem;">🔓 Unblock</button>` : ''}
                   ${isActive
@@ -860,6 +875,23 @@
         document.getElementById('detailPhone').textContent = u.phone;
         document.getElementById('detailPunchIn').textContent = punch.punch_in || '--:--';
         document.getElementById('detailPunchOut').textContent = punch.punch_out || '--:--';
+
+        // Populate Bound Device info
+        const dev = data.device;
+        const devActionContainer = document.getElementById('detailDeviceActionContainer');
+        if (dev) {
+          document.getElementById('detailDevName').textContent = dev.device_name || 'Registered Device';
+          document.getElementById('detailDevId').textContent = dev.device_id;
+          document.getElementById('detailDevRegistered').textContent = formatDate(dev.registered_at);
+          document.getElementById('detailDevLastActive').textContent = formatDate(dev.last_active_at);
+          devActionContainer.innerHTML = `<button onclick="handleAdminUnbindDevice('${escapeAttr(u.user_id)}', '${escapeAttr(u.full_name)}', true)" class="btn btn-warning" style="width:auto; padding:3px 8px; font-size:0.75rem;">🔓 Reset Device</button>`;
+        } else {
+          document.getElementById('detailDevName').textContent = 'No Device Bound';
+          document.getElementById('detailDevId').textContent = '--';
+          document.getElementById('detailDevRegistered').textContent = '--';
+          document.getElementById('detailDevLastActive').textContent = '--';
+          devActionContainer.innerHTML = `<span class="badge badge-secondary" style="font-size:0.72rem;">Unbound</span>`;
+        }
 
         // Setup detail modal passkey button
         document.getElementById('btnDetailAddPasskey').onclick = () => {
@@ -992,6 +1024,28 @@
             }
           } catch (err) {
             App.showAlert(err.message, 'danger');
+          }
+        }
+      );
+    }
+
+    async function handleAdminUnbindDevice(userId, fullName, isFromDetail = false) {
+      showConfirmDialog(
+        'Reset Registered Device (1-User Policy)',
+        `Are you sure you want to unbind the registered device for "${fullName}" (User ID: ${userId})?\n\nThis will reset their device lock and allow them to register/punch attendance from a new device.`,
+        async () => {
+          try {
+            App.showAlert('Resetting device binding...', 'info');
+            const res = await API.adminUnbindUserDevice(userId);
+            if (res.success) {
+              App.showAlert(res.message, 'success');
+              if (isFromDetail) {
+                await openViewUserModal(userId);
+              }
+              await loadUsers();
+            }
+          } catch (err) {
+            App.showAlert(`Failed to unbind device: ${err.message}`, 'danger');
           }
         }
       );

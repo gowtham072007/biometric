@@ -4,7 +4,8 @@ from flask import Blueprint, request, jsonify, session
 from backend.models.schemas import (
     get_user_by_id, get_credentials_by_user, create_credential,
     get_credential_by_id, update_credential_sign_count,
-    get_geofence_settings, log_authentication_event, get_user_punch_info_today
+    get_geofence_settings, log_authentication_event, get_user_punch_info_today,
+    check_device_permission, bind_user_device, get_device_by_user_id
 )
 from backend.services.geofence import verify_location
 from backend.services.webauthn_service import (
@@ -19,6 +20,7 @@ def register_options():
     """Generates WebAuthn registration options for the current or specified user."""
     data = request.get_json() or {}
     user_id = data.get('user_id') or session.get('user_id')
+    device_id = str(data.get('device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
 
     if not user_id:
         return jsonify({'success': False, 'message': 'User ID is required to register a passkey.'}), 400
@@ -26,6 +28,16 @@ def register_options():
     user = get_user_by_id(user_id)
     if not user:
         return jsonify({'success': False, 'message': 'User account not found.'}), 404
+
+    # Enforce 1-user-per-device verification
+    if user.get('role') != 'admin' and device_id:
+        perm = check_device_permission(user['user_id'], device_id, is_admin=False)
+        if not perm['allowed']:
+            return jsonify({
+                'success': False,
+                'message': perm['reason'],
+                'device_blocked': True
+            }), 403
 
     existing_creds = get_credentials_by_user(user['user_id'])
     
@@ -35,6 +47,8 @@ def register_options():
         )
         session['reg_challenge'] = challenge_b64
         session['reg_user_id'] = user['user_id']
+        if device_id:
+            session['reg_device_id'] = device_id
 
         return jsonify({
             'success': True,
@@ -48,16 +62,32 @@ def register_options():
 
 @webauthn_bp.route('/register/verify', methods=['POST'])
 def register_verify():
-    """Verifies client WebAuthn registration response and persists public key."""
+    """Verifies client WebAuthn registration response and persists public key & device binding."""
     data = request.get_json() or {}
     credential_payload = data.get('credential')
     credential_name = data.get('credential_name', 'SmartDevice Passkey')
     user_id = data.get('user_id') or session.get('reg_user_id') or session.get('user_id')
+    device_id = str(data.get('device_id', '') or session.get('reg_device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
+    device_name = data.get('device_name') or credential_name
     
     challenge = session.get('reg_challenge')
 
     if not credential_payload or not challenge or not user_id:
         return jsonify({'success': False, 'message': 'Invalid registration state or missing challenge.'}), 400
+
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found.'}), 404
+
+    # Enforce device check before completing registration
+    if user.get('role') != 'admin' and device_id:
+        perm = check_device_permission(user['user_id'], device_id, is_admin=False)
+        if not perm['allowed']:
+            return jsonify({
+                'success': False,
+                'message': perm['reason'],
+                'device_blocked': True
+            }), 403
 
     try:
         cred_id_b64, public_key_b64, sign_count = verify_webauthn_registration(
@@ -73,8 +103,19 @@ def register_verify():
             credential_name=credential_name
         )
 
+        # Bind device to user
+        if device_id and user.get('role') != 'admin':
+            bind_user_device(
+                user_id=user_id,
+                device_id=device_id,
+                device_name=device_name,
+                user_agent=request.user_agent.string,
+                ip_address=request.remote_addr
+            )
+
         session.pop('reg_challenge', None)
         session.pop('reg_user_id', None)
+        session.pop('reg_device_id', None)
 
         return jsonify({
             'success': True,
@@ -89,13 +130,14 @@ def register_verify():
 @webauthn_bp.route('/login/options', methods=['POST'])
 def login_options():
     """
-    Validates server-side geofence BEFORE generating authentication challenge options.
+    Validates server-side geofence AND device binding BEFORE generating authentication challenge options.
     """
     data = request.get_json() or {}
     user_id = data.get('user_id') or session.get('user_id')
     lat = data.get('latitude')
     lon = data.get('longitude')
     accuracy = data.get('accuracy')
+    device_id = str(data.get('device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
 
     if not user_id:
         return jsonify({'success': False, 'message': 'User ID is required for authentication.'}), 400
@@ -111,6 +153,22 @@ def login_options():
             ip_address=request.remote_addr, user_agent=request.user_agent.string
         )
         return jsonify({'success': False, 'message': 'User account is inactive.'}), 403
+
+    # Device binding check (Enforce 1 user per device & 1 device per user for non-admin accounts)
+    if user.get('role') != 'admin' and device_id:
+        perm = check_device_permission(user['user_id'], device_id, is_admin=False)
+        if not perm['allowed']:
+            log_authentication_event(
+                user_id=user['user_id'], latitude=lat, longitude=lon, gps_accuracy=accuracy,
+                calculated_distance=0, result='DEVICE_MISMATCH', failure_reason=perm['reason'],
+                ip_address=request.remote_addr, user_agent=request.user_agent.string
+            )
+            return jsonify({
+                'success': False,
+                'reason': 'DEVICE_MISMATCH',
+                'message': perm['reason'],
+                'device_blocked': True
+            }), 403
 
     # Check user passkeys
     user_creds = get_credentials_by_user(user['user_id'])
@@ -151,6 +209,8 @@ def login_options():
         session['auth_lon'] = lon
         session['auth_accuracy'] = accuracy
         session['auth_distance'] = loc_result.get('distance_meters')
+        if device_id:
+            session['auth_device_id'] = device_id
 
         return jsonify({
             'success': True,
@@ -170,6 +230,7 @@ def login_verify():
     """
     data = request.get_json() or {}
     credential_payload = data.get('credential')
+    device_id = str(data.get('device_id', '') or session.get('auth_device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
     
     challenge = session.get('auth_challenge')
     user_id = session.get('auth_user_id') or session.get('user_id')
@@ -186,6 +247,26 @@ def login_verify():
             ip_address=request.remote_addr, user_agent=request.user_agent.string
         )
         return jsonify({'success': False, 'message': 'Invalid authentication session or missing challenge.'}), 400
+
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found.'}), 404
+
+    # Device binding check during assertion verify
+    if user.get('role') != 'admin' and device_id:
+        perm = check_device_permission(user['user_id'], device_id, is_admin=False)
+        if not perm['allowed']:
+            log_authentication_event(
+                user_id=user['user_id'], latitude=lat, longitude=lon, gps_accuracy=accuracy,
+                calculated_distance=distance or 0, result='DEVICE_MISMATCH', failure_reason=perm['reason'],
+                ip_address=request.remote_addr, user_agent=request.user_agent.string
+            )
+            return jsonify({
+                'success': False,
+                'reason': 'DEVICE_MISMATCH',
+                'message': perm['reason'],
+                'device_blocked': True
+            }), 403
 
     # Find credential ID from payload
     cred_raw_id = None
@@ -218,7 +299,6 @@ def login_verify():
         update_credential_sign_count(stored_cred['credential_id'], new_sign_count)
         
         # Log successful attendance/authentication event
-        user = get_user_by_id(user_id)
         log_authentication_event(
             user_id=user['user_id'],
             latitude=lat,
@@ -231,6 +311,18 @@ def login_verify():
             ip_address=request.remote_addr,
             user_agent=request.user_agent.string
         )
+
+        # Bind or update last active device
+        if device_id and user.get('role') != 'admin':
+            try:
+                bind_user_device(
+                    user_id=user['user_id'],
+                    device_id=device_id,
+                    user_agent=request.user_agent.string,
+                    ip_address=request.remote_addr
+                )
+            except Exception:
+                pass
 
         # Retrieve updated Punch In / Punch Out status
         punch_info = get_user_punch_info_today(user['user_id'])
@@ -249,9 +341,12 @@ def login_verify():
         session['user_id'] = user['user_id']
         session['role'] = user['role']
         session['full_name'] = user['full_name']
+        if device_id:
+            session['device_id'] = device_id
 
         # Clear challenge
         session.pop('auth_challenge', None)
+        session.pop('auth_device_id', None)
 
         msg = f"Biometric Punch IN successful at {punch_info['punch_in']}!" if current_punch_type == 'PUNCH_IN' else f"Biometric Punch OUT successful at {punch_info['punch_out']}!"
         if is_late:
