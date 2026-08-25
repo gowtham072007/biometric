@@ -45,6 +45,8 @@ def register():
     try:
         pw_hash = hash_password(password)
         user = create_user(user_id, full_name, email, phone, pw_hash, role=role, status='active')
+        if not user:
+            return jsonify({'success': False, 'message': 'Registration failed.'}), 500
 
         return jsonify({
             'success': True,
@@ -149,6 +151,9 @@ def google_login():
     email_in = str(data.get('email', '') or '').strip().lower()
     device_id = str(data.get('device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
     device_name = str(data.get('device_name', '') or '').strip()
+
+    if not credential or not isinstance(credential, str):
+        return jsonify({'success': False, 'message': 'Google credential token is required.'}), 400
 
     rate_key = f"{request.remote_addr}_{email_in or 'google'}"
     is_allowed, wait_sec = check_login_rate_limit(rate_key, max_attempts=5, window_seconds=300)
@@ -275,6 +280,8 @@ def user_me():
 
         try:
             updated = update_own_profile(user_id, full_name=full_name, email=email, phone=phone)
+            if not updated:
+                return jsonify({'success': False, 'message': 'User profile not found.'}), 404
             session['full_name'] = updated['full_name']
             return jsonify({
                 'success': True,
@@ -291,6 +298,8 @@ def user_me():
             return jsonify({'success': False, 'message': str(e)}), 400
         except Exception as e:
             return jsonify({'success': False, 'message': f'Profile update failed: {str(e)}'}), 500
+
+    return jsonify({'success': False, 'message': 'Method not allowed.'}), 405
 
 @auth_bp.route('/me/change-password', methods=['POST'])
 @login_required

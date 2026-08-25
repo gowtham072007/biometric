@@ -96,6 +96,8 @@ def create_admin_user():
     try:
         pw_hash = hash_password(password)
         user = create_user(user_id, full_name, email, phone, pw_hash, role=role, status='active')
+        if not user:
+            return jsonify({'success': False, 'message': 'User creation failed.'}), 500
 
         return jsonify({
             'success': True,
@@ -296,8 +298,11 @@ def save_geofence():
     if not location_name:
         return jsonify({'success': False, 'message': 'Location name is required.'}), 400
 
-    if not validate_coordinates(lat, lon):
+    if lat is None or lon is None or not validate_coordinates(lat, lon):
         return jsonify({'success': False, 'message': 'Invalid latitude or longitude.'}), 400
+
+    if radius is None:
+        return jsonify({'success': False, 'message': 'Radius is required.'}), 400
 
     try:
         radius_val = float(radius)
@@ -307,14 +312,20 @@ def save_geofence():
         return jsonify({'success': False, 'message': 'Invalid radius value.'}), 400
 
     try:
-        max_accuracy_val = float(max_accuracy)
+        max_accuracy_val = float(max_accuracy) if max_accuracy is not None else 50.0
     except (ValueError, TypeError):
         max_accuracy_val = 50.0
 
+    try:
+        lat_val = float(lat)
+        lon_val = float(lon)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'message': 'Invalid latitude or longitude.'}), 400
+
     updated = update_geofence_settings(
         location_name=location_name,
-        latitude=float(lat),
-        longitude=float(lon),
+        latitude=lat_val,
+        longitude=lon_val,
         radius_meters=radius_val,
         max_gps_accuracy_meters=max_accuracy_val,
         is_demo_mode=bool(is_demo)

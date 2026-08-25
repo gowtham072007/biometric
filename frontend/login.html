@@ -170,20 +170,6 @@
         Enter your registered User ID or Gmail address.
       </p>
 
-      <!-- Live Indian Standard Time (IST) Clock Widget -->
-      <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: var(--radius-md); padding: 10px 14px; margin-bottom: 18px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 1.25rem;">🇮🇳</span>
-          <div>
-            <div style="font-size: 0.7rem; color: var(--text-dim); font-weight: 700; letter-spacing: 0.5px;">INDIAN STANDARD TIME (IST)</div>
-            <div id="liveIstDate" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">--</div>
-          </div>
-        </div>
-        <div id="liveIstTime" style="font-size: 1.15rem; font-weight: 700; font-family: monospace; color: var(--primary); letter-spacing: 0.5px;">
-          --:--:-- IST
-        </div>
-      </div>
-
       <form id="loginForm">
         <div class="form-group">
           <label class="form-label" for="user_id">Username or Gmail ID</label>
@@ -326,34 +312,8 @@
     const deviceAlertBox = document.getElementById('deviceMismatchAlert');
     const deviceAlertMsg = document.getElementById('deviceMismatchMsg');
 
-    // Live IST Clock Updates
-    function updateIstClock() {
-      const now = new Date();
-      const timeStr = now.toLocaleTimeString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      });
-      const dateStr = now.toLocaleDateString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        weekday: 'short',
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-      });
-      const timeEl = document.getElementById('liveIstTime');
-      const dateEl = document.getElementById('liveIstDate');
-      if (timeEl) timeEl.textContent = `${timeStr} IST`;
-      if (dateEl) dateEl.textContent = dateStr;
-    }
-    updateIstClock();
-    setInterval(updateIstClock, 1000);
-
     // Check URL parameters for session state
     document.addEventListener('DOMContentLoaded', () => {
-      updateIstClock();
       const params = new URLSearchParams(window.location.search);
       if (params.get('expired') === '1') {
         App.showAlert('Your session has expired. Please log in again.', 'warning');

@@ -36,6 +36,7 @@ def test_late_punch_in_blocking_and_admin_unblock_flow(client):
 
     # Check user account is now blocked_late
     user = get_user_by_id('late_student')
+    assert user is not None
     assert user['status'] == 'blocked_late'
 
     # Login as Admin to unblock user
@@ -46,8 +47,10 @@ def test_late_punch_in_blocking_and_admin_unblock_flow(client):
 
     # User status should now be active
     updated_user = get_user_by_id('late_student')
+    assert updated_user is not None
     assert updated_user['status'] == 'active'
 
     # Check late slip status is approved
     latest_slip = get_user_latest_late_slip('late_student')
+    assert latest_slip is not None
     assert latest_slip['status'] == 'APPROVED'
