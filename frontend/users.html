@@ -369,7 +369,7 @@
         <!-- Registered Device Binding Section -->
         <div style="background: rgba(59, 130, 246, 0.08); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(59, 130, 246, 0.3);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--text-main); margin: 0;">📱 Registered Hardware Device (1-User Policy)</h4>
+            <h4 style="font-size: 0.95rem; font-weight: 600; color: var(--text-main); margin: 0;">📱 Registered Hardware Device</h4>
             <div id="detailDeviceActionContainer"></div>
           </div>
           <div id="detailDeviceContent" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; font-size: 0.82rem;">
@@ -1031,7 +1031,7 @@
 
     async function handleAdminUnbindDevice(userId, fullName, isFromDetail = false) {
       showConfirmDialog(
-        'Reset Registered Device (1-User Policy)',
+        'Reset Registered Device',
         `Are you sure you want to unbind the registered device for "${fullName}" (User ID: ${userId})?\n\nThis will reset their device lock and allow them to register/punch attendance from a new device.`,
         async () => {
           try {
