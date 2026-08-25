@@ -27,6 +27,20 @@
   <main class="app-container">
     <div id="alertContainer"></div>
 
+    <!-- Live Indian Standard Time (IST) Banner -->
+    <div class="card" style="margin-bottom: 14px; padding: 12px 16px; background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.25); display: flex; justify-content: space-between; align-items: center;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 1.25rem;">🕒</span>
+        <div>
+          <div style="font-size: 0.7rem; color: var(--text-dim); font-weight: 700; letter-spacing: 0.5px;">OFFICIAL ATTENDANCE TIME (IST)</div>
+          <div id="liveAuthIstDate" style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">--</div>
+        </div>
+      </div>
+      <div id="liveAuthIstTime" style="font-size: 1.15rem; font-weight: 700; font-family: monospace; color: var(--primary); letter-spacing: 0.5px;">
+        --:--:-- IST
+      </div>
+    </div>
+
     <!-- Location Status Banner & Details Card -->
     <div class="card location-status-card">
       <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">LOCATION VERIFICATION STATUS</div>
@@ -106,7 +120,32 @@
     let currentPosData = null;
     let currentUserData = null;
 
+    function updateAuthIstClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      const dateStr = now.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+      const timeEl = document.getElementById('liveAuthIstTime');
+      const dateEl = document.getElementById('liveAuthIstDate');
+      if (timeEl) timeEl.textContent = `${timeStr} IST`;
+      if (dateEl) dateEl.textContent = dateStr;
+    }
+    updateAuthIstClock();
+    setInterval(updateAuthIstClock, 1000);
+
     document.addEventListener('DOMContentLoaded', async () => {
+      updateAuthIstClock();
       // Check session
       try {
         const res = await API.getCurrentUser();
