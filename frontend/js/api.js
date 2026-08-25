@@ -86,6 +86,15 @@ const API = {
     return this.request('/login', { method: 'POST', body: payload });
   },
 
+  loginWithGoogle(data) {
+    const payload = {
+      ...data,
+      device_id: this.getDeviceId(),
+      device_name: this.getDeviceName()
+    };
+    return this.request('/auth/google', { method: 'POST', body: payload });
+  },
+
   resetPassword(data) {
     return this.request('/reset-password', { method: 'POST', body: data });
   },

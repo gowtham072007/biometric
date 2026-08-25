@@ -1150,8 +1150,7 @@ def bind_user_device(user_id: Any, device_id: Any, device_name: Optional[str] = 
     # Check if this user already has another device bound
     user_current_device = get_device_by_user_id(u_id)
     if user_current_device and user_current_device['device_id'] != d_id:
-        dev_label = user_current_device.get('device_name') or (user_current_device['device_id'][:12] + '...')
-        raise ValueError(f"Your account is already bound to another device ('{dev_label}'). Only 1 device per user is allowed. Please use your registered device or contact an administrator to reset your device binding.")
+        raise ValueError("This account is already linked to another device. Please use your registered device or contact the administrator.")
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -1242,10 +1241,9 @@ def check_device_permission(user_id: Any, device_id: Any, is_admin: bool = False
     # 2. Does this user have a different registered device?
     user_device = get_device_by_user_id(u_id)
     if user_device and user_device['device_id'] != d_id:
-        dev_label = user_device.get('device_name') or (user_device['device_id'][:12] + '...')
         return {
             'allowed': False,
-            'reason': f"Your account is already bound to another registered device ('{dev_label}'). Only 1 device per user is allowed. Please use your registered device or contact an administrator to reset.",
+            'reason': "This account is already linked to another device. Please use your registered device or contact the administrator.",
             'different_device': True,
             'registered_device_id': user_device['device_id']
         }

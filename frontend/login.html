@@ -3,21 +3,130 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Login — FXEC BIOMETRIC</title>
+  <title>Login — Attendance & Biometric Portal</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0d1117">
   <link rel="stylesheet" href="/css/main.css">
   <link rel="stylesheet" href="/css/components.css">
+  <style>
+    .google-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      background: #ffffff;
+      color: #1f2937;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: var(--radius-md);
+      padding: 11px 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      text-decoration: none;
+    }
+    .google-btn:hover {
+      background: #f3f4f6;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+    .google-btn:active {
+      transform: scale(0.99);
+    }
+    .google-btn svg {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+    .divider-with-text {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 18px 0;
+      color: var(--text-dim);
+      font-size: 0.76rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .divider-with-text::before,
+    .divider-with-text::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .divider-with-text:not(:empty)::before {
+      margin-right: 12px;
+    }
+    .divider-with-text:not(:empty)::after {
+      margin-left: 12px;
+    }
+    .device-alert-box {
+      display: none;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 20px;
+      animation: fadeIn 0.3s ease;
+    }
+    .device-alert-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      color: var(--danger);
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+    }
+    .device-alert-text {
+      font-size: 0.86rem;
+      color: var(--text-main);
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
+    .password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .password-toggle-btn {
+      position: absolute;
+      right: 12px;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.1rem;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .policy-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      color: var(--primary);
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 0.74rem;
+      font-weight: 600;
+      margin-bottom: 14px;
+    }
+  </style>
 </head>
 <body>
 
   <header class="top-header">
     <a href="/" class="brand">
-      <div class="brand-icon">🔑</div>
-      <span>FXEC Login</span>
+      <div class="brand-icon">🛡️</div>
+      <span>FXEC Attendance</span>
     </a>
     <div style="display: flex; gap: 10px; align-items: center;">
-      <div id="topUserBadge" class="user-badge">Guest</div>
+      <div id="topUserBadge" class="user-badge">🔒 1-Device Policy</div>
       <button id="topLogoutBtn" onclick="App.logout()" class="btn btn-skyblue" style="display: none; width: auto; padding: 6px 14px; font-size: 0.8rem; border-radius: var(--radius-full);">
         🚪 Logout
       </button>
@@ -27,19 +136,43 @@
   <main class="app-container">
     <div id="alertContainer"></div>
 
+    <!-- Dedicated Device Mismatch Warning Banner -->
+    <div id="deviceMismatchAlert" class="device-alert-box">
+      <div class="device-alert-title">
+        <span>⚠️</span>
+        <span>Device Verification Blocked</span>
+      </div>
+      <div id="deviceMismatchMsg" class="device-alert-text">
+        This account is already linked to another device. Please use your registered device or contact the administrator.
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button type="button" onclick="copyCurrentDeviceId()" class="btn btn-secondary" style="width: auto; font-size: 0.75rem; padding: 4px 10px;">
+          📋 Copy My Device ID
+        </button>
+        <a href="mailto:admin@fxec.ac.in?subject=Device%20Reset%20Request" class="btn btn-danger" style="width: auto; font-size: 0.75rem; padding: 4px 10px; text-decoration: none;">
+          ✉️ Request Admin Reset
+        </a>
+      </div>
+    </div>
+
+    <!-- Login Card -->
     <div class="card">
-      <h2 class="card-title">Sign In to Your Account</h2>
-      <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 20px;">
-        Use your registered User ID or Email to sign in.
+      <div class="policy-pill">
+        <span>📱</span> Strict 1 User Per Device Policy
+      </div>
+
+      <h2 class="card-title" style="margin-bottom: 4px;">Sign In to Your Account</h2>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 18px;">
+        Enter your registered User ID or Gmail address.
       </p>
 
       <form id="loginForm">
         <div class="form-group">
-          <label class="form-label" for="user_id">User ID or Email</label>
-          <input type="text" id="user_id" class="form-input" placeholder="e.g. user ID" required>
+          <label class="form-label" for="user_id">Username or Gmail ID</label>
+          <input type="text" id="user_id" class="form-input" placeholder="e.g. 21CS001 or student@gmail.com" required autocomplete="username">
         </div>
 
-        <!-- Live Attendance % Preview Banner (Appears when User ID is typed) -->
+        <!-- Live Attendance % Preview Banner -->
         <div id="liveAttendancePreview" style="display: none; margin-bottom: 16px; padding: 12px; border-radius: var(--radius-md); background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3);">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
@@ -58,13 +191,34 @@
             <label class="form-label" for="password" style="margin-bottom: 0;">Password</label>
             <a href="javascript:void(0)" id="linkForgotPassword" style="font-size: 0.82rem; color: var(--primary); text-decoration: none; font-weight: 500;">Forgot Password?</a>
           </div>
-          <input type="password" id="password" class="form-input" placeholder="Enter your password" required>
+          <div class="password-wrapper">
+            <input type="password" id="password" class="form-input" placeholder="Enter your password" required autocomplete="current-password" style="padding-right: 42px;">
+            <button type="button" id="btnTogglePassword" class="password-toggle-btn" title="Show/Hide Password">👁️</button>
+          </div>
         </div>
 
-        <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
-          Login to Account
+        <button type="submit" id="btnLoginSubmit" class="btn btn-primary" style="margin-top: 10px; padding: 12px;">
+          🔐 Sign In with Password
         </button>
       </form>
+
+      <div class="divider-with-text">OR CONTINUE WITH</div>
+
+      <!-- Google / Gmail Sign In Button -->
+      <button type="button" id="btnGoogleLogin" class="google-btn">
+        <svg viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+        </svg>
+        <span>Sign in with Google / Gmail</span>
+      </button>
+
+      <!-- Instant Touch / Biometric Authentication Shortcut -->
+      <a href="/authenticate.html" class="btn btn-secondary" style="margin-top: 10px; text-decoration: none; text-align: center; font-size: 0.88rem;">
+        ☝️ Instant Biometric / Passkey Verification
+      </a>
     </div>
 
     <!-- Reset Password with OTP Card (Shown when Forgot Password is clicked) -->
@@ -78,12 +232,12 @@
       <form id="requestOtpForm">
         <div class="form-group">
           <label class="form-label" for="reset_user_id">User ID or Email</label>
-          <input type="text" id="reset_user_id" class="form-input" placeholder="e.g. user ID" required>
+          <input type="text" id="reset_user_id" class="form-input" placeholder="e.g. 21CS001" required>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="reset_phone">Registered Phone Number</label>
-          <input type="tel" id="reset_phone" class="form-input" placeholder="+1234567890" required>
+          <input type="tel" id="reset_phone" class="form-input" placeholder="+919876543210" required>
         </div>
 
         <div style="display: flex; gap: 10px; margin-top: 14px;">
@@ -131,7 +285,6 @@
     </a>
     <a href="/authenticate.html" class="nav-item">
       <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-
       <span>Authenticate</span>
     </a>
     <a href="/dashboard.html" class="nav-item">
@@ -144,19 +297,44 @@
     </a>
   </nav>
 
-  <script src="/js/api.js?v=2.1.0"></script>
-  <script src="/js/app.js?v=2.1.0"></script>
+  <script src="/js/api.js?v=2.2.0"></script>
+  <script src="/js/app.js?v=2.2.0"></script>
   <script>
     const userIdInput = document.getElementById('user_id');
     const previewCard = document.getElementById('liveAttendancePreview');
     const previewName = document.getElementById('previewUserName');
     const previewDays = document.getElementById('previewDaysRatio');
     const previewPct = document.getElementById('previewPctBadge');
+    const deviceAlertBox = document.getElementById('deviceMismatchAlert');
+    const deviceAlertMsg = document.getElementById('deviceMismatchMsg');
+
+    // Check URL parameters for session state
+    document.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('expired') === '1') {
+        App.showAlert('Your session has expired. Please log in again.', 'warning');
+      } else if (params.get('disabled') === '1') {
+        App.showAlert('Account is disabled or inactive. Please contact your system administrator.', 'danger');
+      } else if (params.get('logout') === '1') {
+        App.showAlert('You have been logged out successfully.', 'info');
+      }
+    });
+
+    // Password Show/Hide Toggle
+    const btnTogglePassword = document.getElementById('btnTogglePassword');
+    const passwordInput = document.getElementById('password');
+    if (btnTogglePassword && passwordInput) {
+      btnTogglePassword.addEventListener('click', () => {
+        const isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        btnTogglePassword.textContent = isPassword ? '🙈' : '👁️';
+      });
+    }
 
     let debounceTimer = null;
-
     userIdInput.addEventListener('input', () => {
       clearTimeout(debounceTimer);
+      deviceAlertBox.style.display = 'none';
       const val = userIdInput.value.trim();
       if (!val || val.length < 3) {
         previewCard.style.display = 'none';
@@ -194,10 +372,36 @@
       }
     }
 
+    function showDeviceMismatchWarning(message) {
+      if (deviceAlertMsg) {
+        deviceAlertMsg.textContent = message || 'This account is already linked to another device. Please use your registered device or contact the administrator.';
+      }
+      if (deviceAlertBox) {
+        deviceAlertBox.style.display = 'block';
+        deviceAlertBox.scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    function copyCurrentDeviceId() {
+      const id = API.getDeviceId();
+      navigator.clipboard.writeText(id).then(() => {
+        App.showAlert(`Device ID copied to clipboard: ${id}`, 'info');
+      }).catch(() => {
+        prompt('Copy your Device ID to send to the administrator:', id);
+      });
+    }
+
+    // Password Form Submission
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const user_id = document.getElementById('user_id').value;
+      deviceAlertBox.style.display = 'none';
+
+      const user_id = document.getElementById('user_id').value.trim();
       const password = document.getElementById('password').value;
+      const btn = document.getElementById('btnLoginSubmit');
+
+      btn.disabled = true;
+      btn.textContent = 'Verifying Account & Device...';
 
       try {
         const res = await API.loginUser({ user_id, password });
@@ -209,9 +413,54 @@
             } else {
               window.location.href = '/dashboard.html';
             }
-          }, 1000);
+          }, 800);
         }
       } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '🔐 Sign In with Password';
+
+        if (err.message && (err.message.includes('already linked') || err.message.includes('already registered') || err.message.includes('Only 1 user'))) {
+          showDeviceMismatchWarning(err.message);
+          App.showAlert(err.message, 'danger');
+        } else {
+          App.showAlert(err.message, 'danger');
+        }
+      }
+    });
+
+    // Google / Gmail Sign-In Handler
+    document.getElementById('btnGoogleLogin').addEventListener('click', async () => {
+      deviceAlertBox.style.display = 'none';
+      
+      const emailInput = document.getElementById('user_id').value.trim();
+      let promptEmail = emailInput;
+      if (!promptEmail || !promptEmail.includes('@')) {
+        promptEmail = prompt('Enter your registered Gmail address to sign in with Google:', emailInput || '');
+      }
+
+      if (!promptEmail) return;
+
+      try {
+        App.showAlert('Verifying Google credentials & device link...', 'info');
+        const res = await API.loginWithGoogle({
+          email: promptEmail,
+          credential: `google_oauth_${promptEmail}`
+        });
+
+        if (res.success) {
+          App.showAlert(res.message || 'Google authentication successful! Redirecting...', 'success');
+          setTimeout(() => {
+            if (res.user && res.user.role === 'admin') {
+              window.location.href = '/admin.html';
+            } else {
+              window.location.href = '/dashboard.html';
+            }
+          }, 800);
+        }
+      } catch (err) {
+        if (err.message && (err.message.includes('already linked') || err.message.includes('already registered') || err.message.includes('Only 1 user'))) {
+          showDeviceMismatchWarning(err.message);
+        }
         App.showAlert(err.message, 'danger');
       }
     });

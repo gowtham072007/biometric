@@ -9,7 +9,7 @@ from backend.models.schemas import (
     update_user_details, process_daily_absentees, get_user_full_details,
     update_user_password_direct, delete_credential, admin_unblock_late_user,
     get_all_pending_late_slips, unbind_user_device, unbind_device_by_id,
-    get_all_device_bindings
+    get_all_device_bindings, log_authentication_event, get_device_by_user_id
 )
 from backend.utils.security import admin_required, hash_password
 from backend.services.geofence import validate_coordinates
@@ -405,7 +405,27 @@ def admin_unbind_user_device_route(user_id):
     if not user:
         return jsonify({'success': False, 'message': f'User "{user_id}" not found.'}), 404
 
+    current_device = get_device_by_user_id(user['user_id'])
+    prev_dev_id = current_device['device_id'] if current_device else 'unknown'
+    prev_dev_name = current_device.get('device_name', '') if current_device else ''
+
     success = unbind_user_device(user['user_id'])
+
+    # Record Audit Log in authentication_logs
+    admin_actor = session.get('user_id', 'admin')
+    log_authentication_event(
+        user_id=user['user_id'],
+        latitude=0.0,
+        longitude=0.0,
+        gps_accuracy=0.0,
+        calculated_distance=0.0,
+        result='DEVICE_RESET',
+        failure_reason=f"Device '{prev_dev_name} ({prev_dev_id})' unlinked by Administrator '{admin_actor}'",
+        credential_id=prev_dev_id,
+        ip_address=request.remote_addr,
+        user_agent=request.user_agent.string
+    )
+
     return jsonify({
         'success': True,
         'message': f"Device binding for user '{user['user_id']}' ({user['full_name']}) has been successfully reset. The user can now register and authenticate from their new device."

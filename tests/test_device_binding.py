@@ -1,7 +1,7 @@
 import pytest
 from backend.config import Config
 from backend.app import create_app
-from backend.models.schemas import delete_user, get_device_by_user_id, get_device_by_device_id
+from backend.models.schemas import delete_user, get_device_by_user_id, get_device_by_device_id, get_admin_logs
 
 @pytest.fixture
 def client(tmp_path):
@@ -82,7 +82,7 @@ def test_one_user_per_device_login_flow(client):
     client.post('/api/logout')
 
 
-def test_one_device_per_user_and_admin_unbind(client):
+def test_one_device_per_user_exact_error_and_admin_unbind(client):
     delete_user('user_gamma')
 
     # Admin creates User Gamma
@@ -107,7 +107,7 @@ def test_one_device_per_user_and_admin_unbind(client):
     client.post('/api/logout')
 
     # User Gamma tries to log in on Device G2 (Unauthorized secondary device)
-    # MUST BE REJECTED - 1 Device per User Rule!
+    # MUST BE REJECTED with exact prompt error message!
     login_g2_fail = client.post('/api/login', json={
         'user_id': 'user_gamma',
         'password': 'Password@789',
@@ -115,13 +115,20 @@ def test_one_device_per_user_and_admin_unbind(client):
         'device_name': 'Gamma iPad'
     })
     assert login_g2_fail.status_code == 403
-    assert "already bound to another" in login_g2_fail.json['message']
+    assert login_g2_fail.json['message'] == "This account is already linked to another device. Please use your registered device or contact the administrator."
 
     # Admin unbinds User Gamma's device
     client.post('/api/login', json={'user_id': 'admin', 'password': 'Admin@123456'})
     unbind_resp = client.post('/api/admin/users/user_gamma/unbind-device')
     assert unbind_resp.status_code == 200
     assert unbind_resp.json['success'] is True
+
+    # Verify audit log was written with DEVICE_RESET
+    logs = get_admin_logs()
+    reset_logs = [l for l in logs if l['result'] == 'DEVICE_RESET' and l['user_id'] == 'user_gamma']
+    assert len(reset_logs) > 0
+    assert 'unlinked by Administrator' in reset_logs[0]['failure_reason']
+
     client.post('/api/logout')
 
     # Now User Gamma CAN bind Device G2
@@ -133,6 +140,71 @@ def test_one_device_per_user_and_admin_unbind(client):
     })
     assert login_g2_success.status_code == 200
     assert login_g2_success.json['user']['device']['device_id'] == 'device_gamma_2'
+
+
+def test_google_gmail_login_flow_and_device_binding(client):
+    delete_user('user_gmail')
+
+    # Admin creates user with Gmail ID
+    client.post('/api/login', json={'user_id': 'admin', 'password': 'Admin@123456'})
+    client.post('/api/admin/users', json={
+        'user_id': 'user_gmail',
+        'full_name': 'Google Student',
+        'email': 'student@gmail.com',
+        'phone': '+5555555555',
+        'password': 'Password@Google123'
+    })
+    client.post('/api/logout')
+
+    # First Google Login on Device G_PHONE -> Binds device
+    g_login_1 = client.post('/api/auth/google', json={
+        'email': 'student@gmail.com',
+        'credential': 'google_mock_token_jwt',
+        'device_id': 'device_pixel_google',
+        'device_name': 'Google Pixel 8'
+    })
+    assert g_login_1.status_code == 200
+    assert g_login_1.json['success'] is True
+    assert g_login_1.json['user']['device']['device_id'] == 'device_pixel_google'
+    client.post('/api/logout')
+
+    # Subsequent Google Login on same device -> Succeeds
+    g_login_2 = client.post('/api/auth/google', json={
+        'email': 'student@gmail.com',
+        'credential': 'google_mock_token_jwt',
+        'device_id': 'device_pixel_google',
+        'device_name': 'Google Pixel 8'
+    })
+    assert g_login_2.status_code == 200
+
+    # Google Login from secondary device -> BLOCKED with 1-device error
+    g_login_blocked = client.post('/api/auth/google', json={
+        'email': 'student@gmail.com',
+        'credential': 'google_mock_token_jwt',
+        'device_id': 'unauthorized_secondary_device',
+        'device_name': 'Friend Phone'
+    })
+    assert g_login_blocked.status_code == 403
+    assert g_login_blocked.json['message'] == "This account is already linked to another device. Please use your registered device or contact the administrator."
+
+
+def test_login_rate_limiting(client):
+    # Attempt 5 incorrect logins in succession
+    for _ in range(5):
+        res = client.post('/api/login', json={
+            'user_id': 'nonexistent_test_user',
+            'password': 'WrongPassword123'
+        })
+        assert res.status_code in [401, 429]
+
+    # 6th attempt must be rate-limited (HTTP 429)
+    res_rate_limited = client.post('/api/login', json={
+        'user_id': 'nonexistent_test_user',
+        'password': 'WrongPassword123'
+    })
+    assert res_rate_limited.status_code == 429
+    assert res_rate_limited.json['rate_limited'] is True
+    assert "Too many failed login attempts" in res_rate_limited.json['message']
 
 
 def test_admin_device_exemption_and_management(client):
@@ -187,4 +259,4 @@ def test_webauthn_device_options_enforcement(client):
         'accuracy': 10.0
     })
     assert opt_resp.status_code == 403
-    assert "already bound to another" in opt_resp.json['message']
+    assert "already linked to another device" in opt_resp.json['message']

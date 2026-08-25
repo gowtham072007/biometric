@@ -7,7 +7,11 @@ from backend.models.schemas import (
     calculate_user_attendance_stats, get_user_latest_late_slip, update_late_slip_reason,
     get_device_by_user_id, bind_user_device, check_device_permission
 )
-from backend.utils.security import hash_password, verify_password, login_required, admin_required
+from backend.utils.security import (
+    hash_password, verify_password, login_required, admin_required,
+    check_login_rate_limit, record_failed_login_attempt, clear_login_attempts,
+    verify_google_auth_token
+)
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api')
 
@@ -60,7 +64,7 @@ def register():
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
-    """Password login endpoint with 1-user-per-device verification."""
+    """Password login endpoint with rate limiting & 1-user-per-device verification."""
     data = request.get_json() or {}
     user_id_or_email = str(data.get('user_id', '') or '').strip()
     password = str(data.get('password', '') or '').strip()
@@ -70,13 +74,25 @@ def login():
     if not user_id_or_email or not password:
         return jsonify({'success': False, 'message': 'User ID / Email and password are required.'}), 400
 
+    # Rate limiting check
+    rate_key = f"{request.remote_addr}_{user_id_or_email}"
+    is_allowed, wait_sec = check_login_rate_limit(rate_key, max_attempts=5, window_seconds=300)
+    if not is_allowed:
+        return jsonify({
+            'success': False,
+            'message': 'Too many failed login attempts. Please try again in 5 minutes.',
+            'rate_limited': True,
+            'retry_after': wait_sec
+        }), 429
+
     user = get_user_by_id_or_email(user_id_or_email)
 
     if not user or not verify_password(password, user['password_hash']):
-        return jsonify({'success': False, 'message': 'Invalid credentials.'}), 401
+        record_failed_login_attempt(rate_key)
+        return jsonify({'success': False, 'message': 'Invalid username/Gmail ID or password.'}), 401
 
     if user['status'] == 'inactive':
-        return jsonify({'success': False, 'message': 'Account is inactive. Please contact system administrator.'}), 403
+        return jsonify({'success': False, 'message': 'Account is disabled or inactive. Please contact your system administrator.'}), 403
 
     # Device binding check (Enforce 1 user per device & 1 device per user for non-admin accounts)
     is_admin = (user.get('role') == 'admin')
@@ -100,6 +116,9 @@ def login():
         except ValueError as e:
             return jsonify({'success': False, 'message': str(e), 'device_blocked': True}), 403
 
+    # Successful login -> clear rate limit attempts
+    clear_login_attempts(rate_key)
+
     session['user_id'] = user['user_id']
     session['role'] = user['role']
     session['full_name'] = user['full_name']
@@ -121,6 +140,93 @@ def login():
             'device': bound_device
         }
     })
+
+@auth_bp.route('/auth/google', methods=['POST'])
+def google_login():
+    """Google / Gmail Sign-In endpoint with strict 1-user-per-device verification."""
+    data = request.get_json() or {}
+    credential = data.get('credential')
+    email_in = str(data.get('email', '') or '').strip().lower()
+    device_id = str(data.get('device_id', '') or request.headers.get('X-Device-Id', '') or '').strip()
+    device_name = str(data.get('device_name', '') or '').strip()
+
+    rate_key = f"{request.remote_addr}_{email_in or 'google'}"
+    is_allowed, wait_sec = check_login_rate_limit(rate_key, max_attempts=5, window_seconds=300)
+    if not is_allowed:
+        return jsonify({
+            'success': False,
+            'message': 'Too many failed login attempts. Please try again in 5 minutes.',
+            'rate_limited': True,
+            'retry_after': wait_sec
+        }), 429
+
+    try:
+        token_info = verify_google_auth_token(credential, email_hint=email_in)
+        gmail_id = token_info['email']
+    except ValueError as e:
+        record_failed_login_attempt(rate_key)
+        return jsonify({'success': False, 'message': f'Google authentication failed: {str(e)}'}), 400
+
+    user = get_user_by_email(gmail_id)
+    if not user:
+        user = get_user_by_id(gmail_id)
+
+    if not user:
+        record_failed_login_attempt(rate_key)
+        return jsonify({
+            'success': False,
+            'message': f"No registered account found for Gmail ID '{gmail_id}'. Please register your account with the administrator."
+        }), 404
+
+    if user['status'] == 'inactive':
+        return jsonify({'success': False, 'message': 'Account is disabled or inactive. Please contact your system administrator.'}), 403
+
+    # Device binding check (Enforce 1 user per device & 1 device per user for non-admin accounts)
+    is_admin = (user.get('role') == 'admin')
+    if not is_admin and device_id:
+        perm = check_device_permission(user['user_id'], device_id, is_admin=False)
+        if not perm['allowed']:
+            return jsonify({
+                'success': False,
+                'message': perm['reason'],
+                'device_blocked': True
+            }), 403
+
+        try:
+            bind_user_device(
+                user_id=user['user_id'],
+                device_id=device_id,
+                device_name=device_name or "Smart Device",
+                user_agent=request.user_agent.string,
+                ip_address=request.remote_addr
+            )
+        except ValueError as e:
+            return jsonify({'success': False, 'message': str(e), 'device_blocked': True}), 403
+
+    clear_login_attempts(rate_key)
+
+    session['user_id'] = user['user_id']
+    session['role'] = user['role']
+    session['full_name'] = user['full_name']
+    if device_id:
+        session['device_id'] = device_id
+
+    bound_device = get_device_by_user_id(user['user_id'])
+
+    return jsonify({
+        'success': True,
+        'message': f"Welcome back, {user['full_name']}! Google authentication verified.",
+        'user': {
+            'user_id': user['user_id'],
+            'full_name': user['full_name'],
+            'email': user['email'],
+            'phone': user['phone'],
+            'role': user['role'],
+            'status': user['status'],
+            'device': bound_device
+        }
+    })
+
 
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
