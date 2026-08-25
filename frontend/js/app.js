@@ -10,9 +10,44 @@ const App = {
   currentUser: null,
 
   async init() {
+    this.startGlobalIstClock();
     this.registerServiceWorker();
     this.setupActiveNavigation();
     await this.checkSession();
+  },
+
+  startGlobalIstClock() {
+    const update = () => {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      const dateStr = now.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+
+      // Update any element with these IDs or classes across all pages
+      document.querySelectorAll('.live-ist-time, #liveIstTime, #liveAuthIstTime').forEach(el => {
+        el.textContent = `${timeStr} IST`;
+      });
+      document.querySelectorAll('.live-ist-date, #liveIstDate, #liveAuthIstDate').forEach(el => {
+        el.textContent = dateStr;
+      });
+      document.querySelectorAll('.header-ist-clock-time').forEach(el => {
+        el.textContent = `${timeStr} IST`;
+      });
+    };
+
+    update();
+    setInterval(update, 1000);
   },
 
   registerServiceWorker() {

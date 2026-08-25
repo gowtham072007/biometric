@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fxec-biometric-app-shell-v2';
+const CACHE_NAME = 'fxec-biometric-app-shell-v4';
 const ASSETS = [
   '/',
   '/index.html',
