@@ -193,23 +193,6 @@
       </div>
     </div>
 
-    <!-- Registered Device Binding Card -->
-    <div class="card" id="boundDeviceCard" style="margin-bottom: 20px; border-color: rgba(59, 130, 246, 0.35);">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <div class="card-title" style="margin-bottom: 0;">📱 Registered Device</div>
-        <span id="badgeDeviceStatus" class="badge badge-success" style="font-size: 0.75rem; padding: 4px 8px; border-radius: 6px;">✓ Bound to this device</span>
-      </div>
-      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">
-        Security policy strictly binds your account to this hardware device to prevent buddy punching.
-      </p>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; font-size: 0.88rem; background: rgba(0,0,0,0.25); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--card-border);">
-        <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">DEVICE NAME</span><strong id="boundDevName">Current Smartphone</strong></div>
-        <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">DEVICE IDENTIFIER</span><strong id="boundDevId" style="font-family: monospace; font-size: 0.8rem;">dev_...</strong></div>
-        <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">FIRST REGISTERED</span><strong id="boundDevRegistered">--</strong></div>
-        <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">LAST ACTIVE</span><strong id="boundDevLastActive">--</strong></div>
-      </div>
-    </div>
-
     <!-- Action Shortcuts -->
     <div class="card">
       <div class="card-title">🚀 Quick Actions</div>
@@ -492,23 +475,6 @@
         document.getElementById('profUserId').textContent = activeUser.user_id;
         document.getElementById('profEmail').textContent = activeUser.email;
         document.getElementById('profPhone').textContent = activeUser.phone || '--';
-
-        // Populate Device Card
-        if (activeUser.device) {
-          document.getElementById('boundDevName').textContent = activeUser.device.device_name || 'Registered Smartphone';
-          document.getElementById('boundDevId').textContent = activeUser.device.device_id;
-          document.getElementById('boundDevRegistered').textContent = activeUser.device.registered_at || '--';
-          document.getElementById('boundDevLastActive').textContent = activeUser.device.last_active_at || '--';
-          document.getElementById('badgeDeviceStatus').textContent = '✓ Bound & Active';
-          document.getElementById('badgeDeviceStatus').className = 'badge badge-success';
-        } else {
-          document.getElementById('boundDevName').textContent = API.getDeviceName();
-          document.getElementById('boundDevId').textContent = API.getDeviceId();
-          document.getElementById('boundDevRegistered').textContent = 'Pending First Punch';
-          document.getElementById('boundDevLastActive').textContent = 'Current Session';
-          document.getElementById('badgeDeviceStatus').textContent = '⚡ Will bind on first punch';
-          document.getElementById('badgeDeviceStatus').className = 'badge badge-warning';
-        }
 
         const passkeyStat = document.getElementById('statPasskeyStatus');
         if (passkeyStat) {
