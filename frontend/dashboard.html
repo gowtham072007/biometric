@@ -145,7 +145,7 @@
     <div class="card" id="myPasskeysCard" style="margin-bottom: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
         <div class="card-title" style="margin-bottom: 0;">🔐 My Passkeys</div>
-        <button id="btnRegisterPasskey" class="btn btn-primary" style="width: auto; font-size: 0.85rem; padding: 6px 14px;">
+        <button id="btnRegisterPasskey" class="btn btn-primary" style="display: none; width: auto; font-size: 0.85rem; padding: 6px 14px;">
           ➕ Register New Passkey
         </button>
       </div>
@@ -273,15 +273,25 @@
       try {
         const res = await API.getUserCredentials();
         const tbody = document.getElementById('myPasskeysTbody');
+        const btnRegister = document.getElementById('btnRegisterPasskey');
         if (res.success && res.credentials) {
           if (res.credentials.length === 0) {
             tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-dim); padding: 12px;">No passkeys registered.</td></tr>';
+            if (btnRegister) {
+              btnRegister.style.display = 'inline-flex';
+            }
             return;
           }
+
+          // Once one passkey exists, completely hide the Register New Passkey button
+          if (btnRegister) {
+            btnRegister.style.display = 'none';
+          }
+
           tbody.innerHTML = res.credentials.map(c => `
             <tr>
               <td><strong>${escapeHtml(c.credential_name || 'Passkey')}</strong></td>
-              <td>${c.created_at || '--'}</td>
+              <td>${escapeHtml(c.created_at || '--')}</td>
               <td>
                 <button onclick="deleteMyPasskey('${escapeAttr(c.credential_id)}')" class="btn btn-danger" style="width:auto; padding:4px 8px; font-size:0.75rem;">🗑️ Delete</button>
               </td>
@@ -299,7 +309,7 @@
         const res = await API.deleteUserCredential(credential_id);
         if (res.success) {
           App.showAlert('Passkey deleted.', 'success');
-          loadMyPasskeys();
+          await loadMyPasskeys();
         } else {
           App.showAlert(res.message, 'danger');
         }
@@ -441,25 +451,33 @@
         await loadDashboardData();
         await loadMyPasskeys();
 
-        document.getElementById('btnRegisterPasskey').addEventListener('click', async () => {
-          try {
-            App.showAlert('Requesting passkey registration options...', 'info');
-            const optRes = await API.getWebAuthnRegisterOptions();
-            if (!optRes.success) throw new Error(optRes.message);
+        const btnRegister = document.getElementById('btnRegisterPasskey');
+        if (btnRegister) {
+          btnRegister.addEventListener('click', async () => {
+            try {
+              btnRegister.disabled = true;
+              App.showAlert('Requesting passkey registration options...', 'info');
+              const optRes = await API.getWebAuthnRegisterOptions();
+              if (!optRes.success) throw new Error(optRes.message || 'Failed to get registration options');
 
-            App.showAlert('Please scan your fingerprint or face...', 'info');
-            const credential = await WebAuthnService.registerPasskey(optRes.options);
+              App.showAlert('Please scan your fingerprint or face...', 'info');
+              const credential = await WebAuthnService.registerPasskey(optRes.options);
 
-            App.showAlert('Verifying passkey...', 'info');
-            const verifyRes = await API.verifyWebAuthnRegister(credential, 'My Device Passkey');
-            if (verifyRes.success) {
-              App.showAlert('Passkey registered successfully!', 'success');
-              loadMyPasskeys();
+              App.showAlert('Verifying passkey...', 'info');
+              const verifyRes = await API.verifyWebAuthnRegister(credential, 'My Device Passkey');
+              if (verifyRes.success) {
+                App.showAlert('Passkey registered successfully!', 'success');
+                await loadMyPasskeys();
+              } else {
+                throw new Error(verifyRes.message || 'Passkey verification failed');
+              }
+            } catch (e) {
+              App.showAlert('Registration failed: ' + (e.message || e), 'danger');
+            } finally {
+              btnRegister.disabled = false;
             }
-          } catch (e) {
-            App.showAlert('Registration failed: ' + e.message, 'danger');
-          }
-        });
+          });
+        }
 
         // Change Password Form Submission
         document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {

@@ -40,7 +40,12 @@ def register_options():
             }), 403
 
     existing_creds = get_credentials_by_user(user['user_id'])
-    
+    if len(existing_creds) >= 1:
+        return jsonify({
+            'success': False,
+            'message': 'Only one passkey can be registered for this account.'
+        }), 400
+
     try:
         options_json, challenge_b64 = get_webauthn_registration_options(
             user['user_id'], user['full_name'], existing_creds
@@ -79,6 +84,14 @@ def register_verify():
     if not user:
         return jsonify({'success': False, 'message': 'User not found.'}), 404
 
+    # Enforce 1-passkey limit per user account
+    existing_creds = get_credentials_by_user(user['user_id'])
+    if len(existing_creds) >= 1:
+        return jsonify({
+            'success': False,
+            'message': 'Only one passkey can be registered for this account.'
+        }), 400
+
     # Enforce device check before completing registration
     if user.get('role') != 'admin' and device_id:
         perm = check_device_permission(user['user_id'], device_id, is_admin=False)
@@ -96,7 +109,7 @@ def register_verify():
         
         # Save credential in database
         cred = create_credential(
-            user_id=user_id,
+            user_id=user['user_id'],
             credential_id=cred_id_b64,
             public_key=public_key_b64,
             sign_count=sign_count,
@@ -106,7 +119,7 @@ def register_verify():
         # Bind device to user
         if device_id and user.get('role') != 'admin':
             bind_user_device(
-                user_id=user_id,
+                user_id=user['user_id'],
                 device_id=device_id,
                 device_name=device_name,
                 user_agent=request.user_agent.string,
@@ -121,8 +134,10 @@ def register_verify():
             'success': True,
             'message': 'Passkey registered successfully! You can now authenticate using your smartphone biometric.',
             'credential_id': cred['credential_id'],
-            'user_id': user_id
+            'user_id': user['user_id']
         })
+    except ValueError as ve:
+        return jsonify({'success': False, 'message': str(ve)}), 400
     except Exception as e:
         return jsonify({'success': False, 'message': f'Biometric registration verification failed: {str(e)}'}), 400
 

@@ -859,6 +859,17 @@ def admin_unblock_late_user(user_id: Any, admin_id: str = 'admin') -> bool:
 def create_credential(user_id: Any, credential_id: Any, public_key: Any, sign_count: int = 0, credential_name: str = "SmartDevice Passkey") -> Optional[dict]:
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Enforce 1-passkey limit in database layer
+    cursor.execute("SELECT COUNT(*) AS count FROM webauthn_credentials WHERE user_id = ?", (user_id,))
+    count_row = cursor.fetchone()
+    count = 0
+    if count_row:
+        count = count_row['count'] if isinstance(count_row, dict) else count_row[0]
+    if count >= 1:
+        conn.close()
+        raise ValueError("Only one passkey can be registered for this account.")
+
     cursor.execute("""
         INSERT INTO webauthn_credentials (user_id, credential_id, public_key, sign_count, credential_name)
         VALUES (?, ?, ?, ?, ?)
