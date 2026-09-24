@@ -174,13 +174,8 @@
 
     <!-- My Profile & Security Card -->
     <div class="card" style="margin-bottom: 20px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <div class="card-title" style="margin-bottom: 0;">👤 My Profile & Security</div>
-        <button id="btnEditProfile" onclick="openProfileModal()" class="btn btn-secondary" style="width: auto; font-size: 0.82rem; padding: 6px 12px;">
-          ✏️ Edit Profile
-        </button>
-      </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; font-size: 0.88rem; background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--card-border);">
+      <div class="card-title" style="margin-bottom: 14px;">👤 My Profile & Security</div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; font-size: 0.88rem; background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--card-border); overflow-wrap: anywhere; word-break: break-word;">
         <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">FULL NAME</span><strong id="profName">-</strong></div>
         <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">USER ID / ROLL NO</span><strong id="profUserId">-</strong></div>
         <div><span style="color: var(--text-dim); display: block; font-size: 0.75rem;">EMAIL</span><strong id="profEmail">-</strong></div>
@@ -209,34 +204,6 @@
       </div>
     </div>
   </main>
-
-  <!-- Edit Profile Modal -->
-  <div id="profileModal" class="modal-overlay">
-    <div class="modal-content" style="max-width: 480px;">
-      <div class="modal-header">
-        <h3 class="card-title" style="margin-bottom: 0;">✏️ Edit My Profile</h3>
-        <button type="button" onclick="closeProfileModal()" class="modal-close">✕</button>
-      </div>
-      <form id="editProfileForm">
-        <div class="form-group">
-          <label class="form-label" for="my_full_name">Full Name *</label>
-          <input type="text" id="my_full_name" class="form-input" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="my_email">Email Address *</label>
-          <input type="email" id="my_email" class="form-input" required>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="my_phone">Phone Number *</label>
-          <input type="tel" id="my_phone" class="form-input" required>
-        </div>
-        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px;">
-          <button type="button" onclick="closeProfileModal()" class="btn btn-secondary" style="width: auto;">Cancel</button>
-          <button type="submit" id="btnSaveProfile" class="btn btn-success" style="width: auto;">💾 Save Profile</button>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- Change Password Modal -->
   <div id="changePasswordModal" class="modal-overlay">
@@ -437,18 +404,6 @@
       }
     }
 
-    function openProfileModal() {
-      if (!activeUser) return;
-      document.getElementById('my_full_name').value = activeUser.full_name || '';
-      document.getElementById('my_email').value = activeUser.email || '';
-      document.getElementById('my_phone').value = activeUser.phone || '';
-      document.getElementById('profileModal').classList.add('active');
-    }
-
-    function closeProfileModal() {
-      document.getElementById('profileModal').classList.remove('active');
-    }
-
     function openChangePasswordModal() {
       document.getElementById('changePasswordForm').reset();
       document.getElementById('changePasswordModal').classList.add('active');
@@ -503,36 +458,6 @@
             }
           } catch (e) {
             App.showAlert('Registration failed: ' + e.message, 'danger');
-          }
-        });
-
-        // Edit Profile Form Submission
-        document.getElementById('editProfileForm').addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const full_name = document.getElementById('my_full_name').value.trim();
-          const email = document.getElementById('my_email').value.trim();
-          const phone = document.getElementById('my_phone').value.trim();
-
-          const btn = document.getElementById('btnSaveProfile');
-          btn.disabled = true;
-          btn.textContent = 'Saving...';
-
-          try {
-            const res = await API.updateOwnProfile({ full_name, email, phone });
-            if (res.success) {
-              App.showAlert(res.message, 'success');
-              activeUser = res.user;
-              document.getElementById('welcomeHeading').textContent = `Welcome, ${activeUser.full_name}`;
-              document.getElementById('profName').textContent = activeUser.full_name;
-              document.getElementById('profEmail').textContent = activeUser.email;
-              document.getElementById('profPhone').textContent = activeUser.phone;
-              closeProfileModal();
-            }
-          } catch (err) {
-            App.showAlert(err.message, 'danger');
-          } finally {
-            btn.disabled = false;
-            btn.textContent = '💾 Save Profile';
           }
         });
 
