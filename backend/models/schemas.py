@@ -540,6 +540,58 @@ def get_user_punch_info_today(user_id: Any) -> dict:
         'punch_count': len(rows)
     }
 
+def validate_attendance_time_window(user_id: Any, check_time: Optional[datetime] = None) -> dict:
+    """
+    Validates whether the user can mark In Time or Out Time based on official IST server time.
+    Rules:
+      - In Time: The user can mark/check in only before 9:01 AM (time < 09:01:00).
+        At 09:01 AM or later, disable/reject: "In Time is allowed only before 9:01 AM."
+      - Out Time: The user can mark/check out only after 4:04 PM (time > 16:04:00).
+        At 4:04 PM or earlier, disable/reject: "Out Time is allowed only after 4:04 PM."
+    """
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now_dt = check_time if check_time is not None else datetime.now(ist)
+    now_time = now_dt.time()
+
+    punch_info = get_user_punch_info_today(user_id)
+    next_punch_type = punch_info.get('next_punch_type', 'PUNCH_IN')
+
+    in_cutoff = time(9, 1, 0)   # 09:01:00 AM
+    out_cutoff = time(16, 4, 0)  # 04:04:00 PM (16:04:00)
+
+    if next_punch_type == 'PUNCH_IN':
+        if now_time >= in_cutoff:
+            return {
+                'allowed': False,
+                'punch_type': 'PUNCH_IN',
+                'reason': 'In Time is allowed only before 9:01 AM.',
+                'server_time': now_dt.strftime('%H:%M:%S'),
+                'server_datetime': now_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                'in_cutoff': '09:01:00',
+                'out_cutoff': '16:04:00'
+            }
+    else:  # PUNCH_OUT
+        if now_time <= out_cutoff:
+            return {
+                'allowed': False,
+                'punch_type': 'PUNCH_OUT',
+                'reason': 'Out Time is allowed only after 4:04 PM.',
+                'server_time': now_dt.strftime('%H:%M:%S'),
+                'server_datetime': now_dt.strftime('%Y-%m-%d %H:%M:%S'),
+                'in_cutoff': '09:01:00',
+                'out_cutoff': '16:04:00'
+            }
+
+    return {
+        'allowed': True,
+        'punch_type': next_punch_type,
+        'reason': None,
+        'server_time': now_dt.strftime('%H:%M:%S'),
+        'server_datetime': now_dt.strftime('%Y-%m-%d %H:%M:%S'),
+        'in_cutoff': '09:01:00',
+        'out_cutoff': '16:04:00'
+    }
+
 def calculate_periods_status(punch_in: Optional[str], punch_out: Optional[str] = None) -> list:
     """
     Calculates attendance status for Periods 1 through 7:

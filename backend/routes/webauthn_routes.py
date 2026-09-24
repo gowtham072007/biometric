@@ -5,7 +5,8 @@ from backend.models.schemas import (
     get_user_by_id, get_credentials_by_user, create_credential,
     get_credential_by_id, update_credential_sign_count,
     get_geofence_settings, log_authentication_event, get_user_punch_info_today,
-    check_device_permission, bind_user_device, get_device_by_user_id
+    check_device_permission, bind_user_device, get_device_by_user_id,
+    validate_attendance_time_window, get_ist_now, get_ist_today
 )
 from backend.services.geofence import verify_location
 from backend.services.webauthn_service import (
@@ -190,6 +191,22 @@ def login_options():
     if not user_creds:
         return jsonify({'success': False, 'message': 'No biometric passkey registered for this account. Please register a passkey first.'}), 400
 
+    # SERVER-SIDE ATTENDANCE TIME WINDOW VALIDATION
+    time_window = validate_attendance_time_window(user['user_id'])
+    if not time_window['allowed']:
+        log_authentication_event(
+            user_id=user['user_id'], latitude=lat, longitude=lon, gps_accuracy=accuracy,
+            calculated_distance=0, result='FAILED', failure_reason=time_window['reason'],
+            ip_address=request.remote_addr, user_agent=request.user_agent.string
+        )
+        return jsonify({
+            'success': False,
+            'reason': 'TIME_RESTRICTION',
+            'message': time_window['reason'],
+            'punch_type': time_window['punch_type'],
+            'server_time': time_window['server_time']
+        }), 400
+
     # SERVER-SIDE INDEPENDENT GEOFENCE VALIDATION
     geofence = get_geofence_settings()
     loc_result = verify_location(lat, lon, accuracy, geofence)
@@ -301,6 +318,20 @@ def login_verify():
         )
         return jsonify({'success': False, 'message': 'Credential not registered for this account.'}), 400
 
+    # SERVER-SIDE ATTENDANCE TIME WINDOW VALIDATION
+    time_window = validate_attendance_time_window(user['user_id'])
+    if not time_window['allowed']:
+        log_authentication_event(
+            user_id=user['user_id'], latitude=lat, longitude=lon, gps_accuracy=accuracy,
+            calculated_distance=distance or 0, result='FAILED', failure_reason=time_window['reason'],
+            ip_address=request.remote_addr, user_agent=request.user_agent.string
+        )
+        return jsonify({
+            'success': False,
+            'reason': 'TIME_RESTRICTION',
+            'message': time_window['reason']
+        }), 400
+
     # VERIFY WEBAUTHN ASSERTION SIGNATURE
     try:
         new_sign_count = verify_webauthn_authentication(
@@ -397,6 +428,34 @@ def login_verify():
         return jsonify({'success': False, 'message': f'Biometric verification failed: {str(e)}'}), 400
 
 
+@webauthn_bp.route('/attendance/status', methods=['GET'])
+def get_attendance_status():
+    """Returns current server IST time, punch information, and attendance window eligibility."""
+    user_id = request.args.get('user_id') or session.get('user_id')
+    if not user_id:
+        return jsonify({
+            'success': True,
+            'server_datetime': get_ist_now(),
+            'server_date': get_ist_today()
+        })
+
+    user = get_user_by_id(user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'User not found.'}), 404
+
+    window = validate_attendance_time_window(user['user_id'])
+    punch_info = get_user_punch_info_today(user['user_id'])
+
+    return jsonify({
+        'success': True,
+        'user_id': user['user_id'],
+        'punch_info': punch_info,
+        'window': window,
+        'server_time': window['server_time'],
+        'server_datetime': window['server_datetime']
+    })
+
+
 @webauthn_bp.route('/credentials', methods=['GET'])
 def get_user_credentials():
     """Returns registered passkeys for the logged in user."""
@@ -406,6 +465,7 @@ def get_user_credentials():
     
     creds = get_credentials_by_user(user_id)
     return jsonify({'success': True, 'credentials': creds})
+
 
 @webauthn_bp.route('/credentials/<credential_id>', methods=['DELETE'])
 def delete_user_credential(credential_id):

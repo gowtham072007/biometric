@@ -175,6 +175,11 @@ const API = {
     });
   },
 
+  getAttendanceStatus(user_id) {
+    const q = user_id ? `?user_id=${encodeURIComponent(user_id)}` : '';
+    return this.request(`/webauthn/attendance/status${q}`, { method: 'GET' });
+  },
+
   verifyWebAuthnLogin(credential, locationData) {
     return this.request('/webauthn/login/verify', { 
       method: 'POST', 

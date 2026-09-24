@@ -215,14 +215,37 @@
           document.getElementById('valDistance').textContent = `${locResult.distance_meters} meters`;
         }
 
+        // Check Attendance Time Window on Server
+        const targetUserId = currentUserData ? currentUserData.user_id : '';
+        let timeWindow = null;
+        try {
+          const statusRes = await API.getAttendanceStatus(targetUserId);
+          if (statusRes.success && statusRes.window) {
+            timeWindow = statusRes.window;
+          }
+        } catch (e) {
+          console.error('Error fetching attendance time status:', e);
+        }
+
         if (locResult.is_inside) {
-          indicator.className = 'status-indicator inside';
-          indicator.innerHTML = '✓ INSIDE AUTHORIZED AREA';
-          
-          btnAuth.classList.remove('disabled');
-          btnAuth.disabled = false;
-          instruction.textContent = 'Location verified! Tap the button to complete biometric authentication.';
-          instruction.style.color = 'var(--success)';
+          if (timeWindow && !timeWindow.allowed) {
+            indicator.className = 'status-indicator inside';
+            indicator.innerHTML = '✓ INSIDE AUTHORIZED AREA';
+            
+            btnAuth.classList.add('disabled');
+            btnAuth.disabled = true;
+            instruction.textContent = timeWindow.reason;
+            instruction.style.color = 'var(--danger)';
+          } else {
+            indicator.className = 'status-indicator inside';
+            indicator.innerHTML = '✓ INSIDE AUTHORIZED AREA';
+            
+            btnAuth.classList.remove('disabled');
+            btnAuth.disabled = false;
+            const punchLabel = timeWindow && timeWindow.punch_type === 'PUNCH_OUT' ? 'Out Time' : 'In Time';
+            instruction.textContent = `Location verified! Tap the button to mark ${punchLabel}.`;
+            instruction.style.color = 'var(--success)';
+          }
         } else {
           indicator.className = 'status-indicator outside';
           indicator.innerHTML = '✕ OUTSIDE AUTHORIZED AREA';
@@ -248,11 +271,13 @@
       }
 
       const targetUserId = currentUserData ? currentUserData.user_id : 'admin';
+      const btnAuth = document.getElementById('btnBiometricTrigger');
+      const instruction = document.getElementById('biometricInstruction');
 
       try {
-        App.showAlert('Contacting server & validating geofence coordinates...', 'info');
+        App.showAlert('Contacting server & validating attendance time & geofence...', 'info');
         
-        // 1. Get WebAuthn Login Options from Server (with independent server-side geofence validation)
+        // 1. Get WebAuthn Login Options from Server (with independent server-side time window & geofence validation)
         const optRes = await API.getWebAuthnLoginOptions(targetUserId, currentPosData);
 
         if (!optRes.success) {
@@ -267,6 +292,14 @@
                 return;
               }
             }
+          }
+          if (btnAuth) {
+            btnAuth.classList.add('disabled');
+            btnAuth.disabled = true;
+          }
+          if (instruction) {
+            instruction.textContent = optRes.message;
+            instruction.style.color = 'var(--danger)';
           }
           throw new Error(optRes.message || 'Server rejected location or options.');
         }
@@ -286,6 +319,8 @@
           setTimeout(() => {
             window.location.href = '/history.html';
           }, 1500);
+        } else {
+          throw new Error(verifyRes.message || 'Verification failed.');
         }
       } catch (err) {
         App.showAlert(`Biometric authentication failed: ${err.message}`, 'danger');
